@@ -76,13 +76,13 @@ int main (int argc, char * argv[]) {
 	while(1) {
 		//ask master the closest port that asks for my largest merce
 		sleep(1);
-		printf("POSX %s\n", posx_str);
-		printf("POSY %s\n", posy_str);
 		removeSpoiled(cargo, atoi(argv[2]));
 		strcpy(message.mesg_text, argv[2]);
 		strcat(message.mesg_text, ":");
+		sprintf(posx_str, "%f", pos.x);
 		strcat(message.mesg_text, posx_str);
 		strcat(message.mesg_text, ":");
+		sprintf(posy_str, "%f", pos.y);
 		strcat(message.mesg_text, posy_str);
 		strcat(message.mesg_text, ":");
 		if(randomportflag == 0) {
@@ -127,7 +127,6 @@ int main (int argc, char * argv[]) {
 
 		//wait for port answer
 		msgrcv(atoi(argv[1]), &message, (sizeof(long) + sizeof(char) * 100), 1, 0);
-		//ERRORE POSX = dock1234...
 		strcpy(text, strtok(message.mesg_text, ":"));
 		strcpy(shm_id_porto_req, strtok(NULL, ":"));
 		strcpy(shm_id_porto_aval, strtok(NULL, ":"));
