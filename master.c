@@ -140,7 +140,10 @@ int main (int argc, char ** argv) {
 		for(int j = 0; j < parameters.SO_MERCI * 30; j++) {
 			ports_shm_ptr_aval[i][j].type = 0;
 			ports_shm_ptr_aval[i][j].qty = 0;
-			ports_shm_ptr_req[i][j]= 0;
+		}
+
+		printf("_______TEST\n");
+		for(int j = 0; j < parameters.SO_MERCI * 2 + 1; j++) {
 			ports_shm_ptr_req[i][j] = 0;
 		}
 		

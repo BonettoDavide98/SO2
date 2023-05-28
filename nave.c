@@ -175,24 +175,24 @@ int main (int argc, char * argv[]) {
 			}
 
 			for(int i = 0; i < shm_ptr_porto_req[0] && cargocapacity_free > 0; i++) {
-				if(shm_ptr_porto_aval[i].type > 0 && shm_ptr_porto_aval[i].qty > 0) {
+				if(shm_ptr_porto_aval[i].type != 0 && shm_ptr_porto_aval[i].qty > 0) {
 					if(cargocapacity_free >= shm_ptr_porto_aval[i].qty) {
-						for(int j = 0; j < 20; j++) {
-							if(cargo[j].qty == 0 && cargo[j].type == 0) {
+						for(int j = 0; j < max_slots; j++) {
+							if(cargo[j].type == -1 || cargo[j].type == 0) {
 								printf("SHIP %s LOADING %d TONS OF %d\n", argv[2], shm_ptr_porto_aval[i].qty, shm_ptr_porto_aval[i].type);
 								cargo[j].type = shm_ptr_porto_aval[i].type;
 								cargo[j].qty = shm_ptr_porto_aval[i].qty;
 								cargo[j].spoildate.tv_sec = shm_ptr_porto_aval[i].spoildate.tv_sec;
 								cargo[j].spoildate.tv_usec = shm_ptr_porto_aval[i].spoildate.tv_usec;
 								cargocapacity_free -= cargo[j].qty;
-								shm_ptr_porto_aval[i].type = 0;
+								shm_ptr_porto_aval[i].type = -1;
 								shm_ptr_porto_aval[i].qty = 0;
 								j = 20;
 							}
 						}
 					} else {
-						for(int j = 0; j < 20; j++) {
-							if(cargo[j].qty == 0 && cargo[j].type == 0) {
+						for(int j = 0; j < max_slots; j++) {
+							if(cargo[j].type == -1 || cargo[j].type == 0) {
 								printf("SHIP %s LOADING %d TONS OF %d\n",  argv[2], cargocapacity_free, shm_ptr_porto_aval[i].type);
 								cargo[j].type = shm_ptr_porto_aval[i].type;
 								shm_ptr_porto_aval[i].qty -= cargocapacity_free;
@@ -219,9 +219,11 @@ int main (int argc, char * argv[]) {
 			printf("RIPARTITA\n");
 
 			//printf("SHIP %s CARGO: |", argv[2]);
-			for(int i = 0; i < 20; i++) {
-				if(cargo[i].qty > 0 && cargo[i].type > 0) {
-					//printf(" %d TONS OF %d |", cargo[i].qty, cargo[i].type);
+			for(int i = 0; i < max_slots; i++) {
+				if(cargo[i].type == 0) {
+					i = max_slots;
+				} else if(cargo[i].qty > 0 && cargo[i].type > 0) {
+					printf(" %d TONS OF %d |", cargo[i].qty, cargo[i].type);
 				}
 			}
 			printf("\n");
