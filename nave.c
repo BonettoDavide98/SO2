@@ -76,6 +76,8 @@ int main (int argc, char * argv[]) {
 	while(1) {
 		//ask master the closest port that asks for my largest merce
 		sleep(1);
+		printf("POSX %s\n", posx_str);
+		printf("POSY %s\n", posy_str);
 		removeSpoiled(cargo, atoi(argv[2]));
 		strcpy(message.mesg_text, argv[2]);
 		strcat(message.mesg_text, ":");
@@ -84,7 +86,7 @@ int main (int argc, char * argv[]) {
 		strcat(message.mesg_text, posy_str);
 		strcat(message.mesg_text, ":");
 		if(randomportflag == 0) {
-			sprintf(text, "%d", getLargestCargo(cargo));
+			sprintf(text, "%d", getLargestCargo(cargo, max_slots));
 			strcat(message.mesg_text, text);
 		} else {
 			randomportflag = 0;
@@ -125,6 +127,7 @@ int main (int argc, char * argv[]) {
 
 		//wait for port answer
 		msgrcv(atoi(argv[1]), &message, (sizeof(long) + sizeof(char) * 100), 1, 0);
+		//ERRORE POSX = dock1234...
 		strcpy(text, strtok(message.mesg_text, ":"));
 		strcpy(shm_id_porto_req, strtok(NULL, ":"));
 		strcpy(shm_id_porto_aval, strtok(NULL, ":"));
@@ -142,7 +145,6 @@ int main (int argc, char * argv[]) {
 				printf("*** shmat error nave aval ***\n");
 				exit(1);
 			}
-
 			for(int k = 0; k < max_slots; k++) {
 				if(cargo[k].type == 0) {
 					k = max_slots;
@@ -207,9 +209,6 @@ int main (int argc, char * argv[]) {
 				}
 			}
 
-
-			sleep(1);
-
 			strcpy(message.mesg_text, "dockfree");
 			strcat(message.mesg_text, ":");
 			strcat(message.mesg_text, argv[1]);
@@ -238,29 +237,20 @@ int main (int argc, char * argv[]) {
 }
 
 //returns largest type of merce loaded in cargo
-int getLargestCargo(struct merce * cargo) {
-	int label = -1;
-	int temp = 0;
-	int maxlabel;
-	int max = -1;
+int getLargestCargo(struct merce * cargo, int max_slots) {
+	int max = 0;
+	int imax = 0;
 
-	for (int i = 0; i < 20; i++) {
-		if(cargo[i].type != maxlabel && cargo[i].type > 0 && cargo[i].qty > 0) {
-			label = cargo[i].type;
-			for(int j = i; j < 20; j++) {
-				if(cargo[j].type == label && cargo[j].qty > 0) {
-					temp += cargo[i].qty;
-				}
-			}
-
-			if(temp > max) {
-				maxlabel = label;
-				max = temp;
-			}
+	for(int i = 0; i < max_slots; i++) {
+		if(cargo[i].type == 0) {
+			return imax;
+		} else if(cargo[i].type > 0 && cargo[i].qty > max) {
+			max = cargo[i].qty;
+			imax = cargo[i].type;
 		}
 	}
 
-	return maxlabel;
+	return imax;
 }
 
 //remove spoiled merci

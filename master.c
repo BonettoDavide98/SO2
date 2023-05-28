@@ -159,10 +159,6 @@ int main (int argc, char ** argv) {
 			tot += temp;
 		}
 
-		for(int j = 0; j < parameters.SO_MERCI + 1; j++) {
-			printf("TEMP %d: %d\n", j, temparray[j]);
-		}
-
 		a = 0;
 		for(int j = 1; j < parameters.SO_MERCI + 1; j++) {
 			switch(rand() % 2) {
