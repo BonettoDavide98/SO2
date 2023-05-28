@@ -42,7 +42,7 @@ int main (int argc, char ** argv) {
 	int sem_id, status;
 	pid_t child_pid, *kid_pids;
 	struct sembuf sops;
-    char *args[12];
+    char *args[13];
 	char *argss[11];
 	char *argst[5];
 	int *ports_shm_id_aval = malloc(parameters.SO_PORTI * sizeof(ports_shm_id_aval));
@@ -63,7 +63,7 @@ int main (int argc, char ** argv) {
 
 	srand(time(NULL));
 
-	for(int i = 0; i < 12; i++) {
+	for(int i = 0; i < 13; i++) {
 		args[i] = malloc(20);
 	}
 
@@ -103,24 +103,24 @@ int main (int argc, char ** argv) {
 	int a,b,tot,temp;
 	//create ports
 	for(int i = 0; i < parameters.SO_PORTI; i++) {
-		if((int) (ports_shm_id_aval[i]  = shmget(IPC_PRIVATE, parameters.SO_MERCI * sizeof(struct merce *), 0600)) < 0) {
+		if((int) (ports_shm_id_aval[i]  = shmget(IPC_PRIVATE, sizeof(int), 0600)) < 0) {
 			printf("*** shmget aval error ***\n");
 			exit(1);
 		}
 
-		ports_shm_ptr_aval[i] = malloc(parameters.SO_MERCI * 30 * sizeof(struct merce));
+		ports_shm_ptr_aval[i] = malloc((10 * parameters.SO_MERCI) * sizeof(struct merce));
 		if((struct merce *) (ports_shm_ptr_aval[i] = (struct merce *) shmat(ports_shm_id_aval[i], NULL, 0)) == -1) {
 			printf("*** shmat aval error ***\n");
 			exit(1);
 		}
 
-		if((int) (ports_shm_id_req[i]  = shmget(IPC_PRIVATE, (parameters.SO_MERCI + 1) * sizeof(int), 0600)) < 0) {
+		if((int) (ports_shm_id_req[i]  = shmget(IPC_PRIVATE, sizeof(int), 0600)) < 0) {
 			printf("*** shmget req error ***\n");
 			exit(1);
 		}
 
 		ports_shm_ptr_req[i] = malloc((parameters.SO_MERCI * 2 + 1) * sizeof(int));
-		if((int) (ports_shm_ptr_req[i] = (int) shmat(ports_shm_id_req[i], NULL, 0)) == -1) {
+		if((int *) (ports_shm_ptr_req[i] = (int *) shmat(ports_shm_id_req[i], NULL, 0)) == -1) {
 			printf("*** shmat req error ***\n");
 			exit(1);
 		}
@@ -137,18 +137,17 @@ int main (int argc, char ** argv) {
 		
 		//printf("PORT CREATED IN %f %f\n", ports_positions[i].x, ports_positions[i].y);
 
-		for(int j = 0; j < parameters.SO_MERCI * 30; j++) {
+		for(int j = 0; j < parameters.SO_MERCI; j++) {
 			ports_shm_ptr_aval[i][j].type = 0;
 			ports_shm_ptr_aval[i][j].qty = 0;
 		}
 
-		printf("_______TEST\n");
 		for(int j = 0; j < parameters.SO_MERCI * 2 + 1; j++) {
 			ports_shm_ptr_req[i][j] = 0;
 		}
 		
 		int *temparray = malloc((parameters.SO_MERCI + 1) * sizeof(int));
-		for(int j = 1; j < parameters.SO_MERCI + 1; j++) {
+		for(int j = 0; j < parameters.SO_MERCI + 1; j++) {
 			temparray[j] = 0;
 		}
 
@@ -160,20 +159,25 @@ int main (int argc, char ** argv) {
 			tot += temp;
 		}
 
+		for(int j = 0; j < parameters.SO_MERCI + 1; j++) {
+			printf("TEMP %d: %d\n", j, temparray[j]);
+		}
+
 		a = 0;
 		for(int j = 1; j < parameters.SO_MERCI + 1; j++) {
-			switch(rand() % 3) {
+			switch(rand() % 2) {
 				case 0:
 					ports_shm_ptr_aval[i][a].type = j;
 					ports_shm_ptr_aval[i][a].qty = temparray[j];
 					gettimeofday(&ports_shm_ptr_aval[i][a].spoildate, NULL);
 					ports_shm_ptr_aval[i][a].spoildate.tv_sec += rand() % (parameters.SO_MAX_VITA - parameters.SO_MIN_VITA);
+					printf("ADDED %d TONS OF %d TO PORT %d\n", temparray[j], j, i);
+					printf("%d %d\n", ports_shm_ptr_aval[i][a].qty, ports_shm_ptr_aval[i][a].type);
 					a += 1;
 					break;
 				case 1:
 					ports_shm_ptr_req[i][j] = temparray[j];
-					break;
-				case 2:
+					printf("ADDED REQUEST OF %d TONS OF %d TO PORT %d\n", temparray[j], j, i);
 					break;
 			}
 		}
@@ -202,7 +206,8 @@ int main (int argc, char ** argv) {
 		sprintf(args[8], "%d", ports_shm_id_req[i]);
 		sprintf(args[9], "%d", parameters.SO_FILL);
 		sprintf(args[10], "%d", parameters.SO_LOADSPEED);
-    	args[11] = NULL;
+		sprintf(args[11], "%d", (parameters.SO_MERCI + 1));
+    	args[12] = NULL;
 
 		switch(kid_pids[i] = fork()) {
 			case -1:

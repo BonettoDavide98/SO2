@@ -35,6 +35,7 @@ int main (int argc, char * argv[]) {
 	int loadtime = atoi(argv[10]);
 	struct merce *shm_ptr_aval;
 	int *shm_ptr_req;
+	int num_merci = atoi(argv[11]);
 	key_t mem_key;
 	struct sembuf sops;
 	struct merce *available;
@@ -134,6 +135,24 @@ int main (int argc, char * argv[]) {
 				rear = -1;
 			}
 		}
+
+		printf("PORT AVAILABLE: |");
+		for(int j = 0; j < shm_ptr_req[0]; j++) {
+			if(shm_ptr_aval[j].type == 0) {
+				j = shm_ptr_req[0];
+			} else if(shm_ptr_aval[j].qty > 0) {
+				printf(" %d TONS OF %d |", shm_ptr_aval[j].qty, shm_ptr_aval[j].type);
+			}
+		}
+		printf("\n");
+
+		printf("PORT REQUESTS: |");
+		for(int j = 1; j < num_merci + 1; j++) {
+			if(shm_ptr_req[j] > 0) {
+				printf(" %d TONS OF %d |", shm_ptr_req[j], j);
+			}
+		}
+		printf("\n");
 	}
 
 	exit(0);
@@ -145,13 +164,13 @@ void removeSpoiled(struct merce *available, int portid, int limit) {
 	for(int i = 0; i < limit; i++) {
 		if(available[i].type > 0 && available[i].qty > 0) {
 			if(available[i].spoildate.tv_sec < currenttime.tv_sec) {
-				//printf("REMOVED %d TONS OF %d FROM PORT %d DUE TO SPOILAGE\n", available[i].qty, available[i].type, portid);
-				available[i].type = 0;
+				printf("REMOVED %d TONS OF %d FROM PORT %d DUE TO SPOILAGE\n", available[i].qty, available[i].type, portid);
+				available[i].type = -1;
 				available[i].qty = 0;
 			} else if(available[i].spoildate.tv_sec == currenttime.tv_sec) {
 				if(available[i].spoildate.tv_usec <= currenttime.tv_usec) {
-					//printf("REMOVED %d TONS OF %d FROM PORT %d DUE TO SPOILAGE\n", available[i].qty, available[i].type, portid);
-					available[i].type = 0;
+					printf("REMOVED %d TONS OF %d FROM PORT %d DUE TO SPOILAGE\n", available[i].qty, available[i].type, portid);
+					available[i].type = -1;
 					available[i].qty = 0;
 				}
 			}

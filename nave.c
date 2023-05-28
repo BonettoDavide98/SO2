@@ -187,7 +187,7 @@ int main (int argc, char * argv[]) {
 								cargocapacity_free -= cargo[j].qty;
 								shm_ptr_porto_aval[i].type = -1;
 								shm_ptr_porto_aval[i].qty = 0;
-								j = 20;
+								j = max_slots;
 							}
 						}
 					} else {
@@ -200,7 +200,7 @@ int main (int argc, char * argv[]) {
 								cargo[j].spoildate.tv_sec = shm_ptr_porto_aval[i].spoildate.tv_sec;
 								cargo[j].spoildate.tv_usec = shm_ptr_porto_aval[i].spoildate.tv_usec;
 								cargocapacity_free = 0;
-								j = 20;
+								j = max_slots;
 							}
 						}
 					}
@@ -218,7 +218,7 @@ int main (int argc, char * argv[]) {
 			msgrcv(atoi(argv[1]), &message, (sizeof(long) + sizeof(char) * 100), 1, 0);
 			printf("RIPARTITA\n");
 
-			//printf("SHIP %s CARGO: |", argv[2]);
+			printf("SHIP %s CARGO: |", argv[2]);
 			for(int i = 0; i < max_slots; i++) {
 				if(cargo[i].type == 0) {
 					i = max_slots;
