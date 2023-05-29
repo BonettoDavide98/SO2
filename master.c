@@ -131,7 +131,7 @@ int main (int argc, char ** argv) {
 			exit(1);
 		}
 
-		ports_shm_ptr_req[i] = malloc((parameters.SO_MERCI * 2 + 1) * sizeof(int));
+		ports_shm_ptr_req[i] = malloc((parameters.SO_MERCI * 3 + 1) * sizeof(int));
 		if((int *) (ports_shm_ptr_req[i] = (int *) shmat(ports_shm_id_req[i], NULL, 0)) == -1) {
 			printf("*** shmat req error ***\n");
 			exit(1);

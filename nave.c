@@ -156,31 +156,7 @@ int main (int argc, char * argv[]) {
 				exit(1);
 			}
 
-			tonstomove = 0;
-
-			for(int k = 0; k < max_slots; k++) {
-				if(cargo[k].type == 0) {
-					k = max_slots;
-				} else {
-					if(cargo[k].type > 0 && cargo[k].qty > 0 && shm_ptr_porto_req[cargo[k].type] > 0) {
-						if(cargo[k].qty >= shm_ptr_porto_req[cargo[k].type]) {
-							shm_ptr_porto_req[cargo[k].type + num_merci - 1] += shm_ptr_porto_req[cargo[k].type];
-							cargo[k].qty -= shm_ptr_porto_req[cargo[k].type];
-							tonstomove += shm_ptr_porto_req[cargo[k].type];
-							shm_ptr_porto_req[cargo[k].type] = 0;
-							if(cargo[k].qty == 0) {
-								cargo[k].type = -1;
-							}
-						} else {
-							shm_ptr_porto_req[cargo[k].type + num_merci - 1] += cargo[k].qty;
-							shm_ptr_porto_req[cargo[k].type] -= cargo[k].qty;
-							tonstomove += cargo[k].qty;
-							cargo[k].qty = 0;
-							cargo[k].type = -1;
-						}
-					}
-				}
-			}
+			tonstomove = unloadCargo(cargo, shm_ptr_porto_req, max_slots, num_merci);
 
 			cargocapacity_free = cargocapacity;
 			for(int i = 0; i < max_slots; i++) {
@@ -191,38 +167,35 @@ int main (int argc, char * argv[]) {
 				}
 			}
 
-			for(int i = 0; i < shm_ptr_porto_req[0] && cargocapacity_free > 0; i++) {
-				if(shm_ptr_porto_aval[i].type != 0 && shm_ptr_porto_aval[i].qty > 0) {
-					if(cargocapacity_free >= shm_ptr_porto_aval[i].qty) {
-						for(int j = 0; j < max_slots; j++) {
-							if(cargo[j].type == -1 || cargo[j].type == 0) {
-								printf("SHIP %s LOADING %d TONS OF %d\n", argv[2], shm_ptr_porto_aval[i].qty, shm_ptr_porto_aval[i].type);
-								cargo[j].type = shm_ptr_porto_aval[i].type;
-								cargo[j].qty = shm_ptr_porto_aval[i].qty;
-								cargo[j].spoildate.tv_sec = shm_ptr_porto_aval[i].spoildate.tv_sec;
-								cargo[j].spoildate.tv_usec = shm_ptr_porto_aval[i].spoildate.tv_usec;
-								tonstomove += cargo[j].qty;
-								cargocapacity_free -= cargo[j].qty;
-								shm_ptr_porto_aval[i].type = -1;
-								shm_ptr_porto_aval[i].qty = 0;
-								j = max_slots;
-							}
+			int splitton = cargocapacity_free / num_merci;
+			int flag = 1;
+
+			while(flag) {
+				flag = 0;
+				for(int i = 0; i < shm_ptr_porto_req[0] && cargocapacity_free > 0 && shm_ptr_porto_aval[i].type != 0; i++) {
+					if(shm_ptr_porto_aval[i].type > 0 && shm_ptr_porto_aval[i].qty > 0) {
+						if(splitton > cargocapacity_free) {
+							splitton = cargocapacity_free;
 						}
-					} else {
-						for(int j = 0; j < max_slots; j++) {
-							if(cargo[j].type == -1 || cargo[j].type == 0) {
-								printf("SHIP %s LOADING %d TONS OF %d\n",  argv[2], cargocapacity_free, shm_ptr_porto_aval[i].type);
-								cargo[j].type = shm_ptr_porto_aval[i].type;
-								shm_ptr_porto_aval[i].qty -= cargocapacity_free;
-								cargo[j].qty = cargocapacity_free;
-								tonstomove += cargo[j].qty;
-								cargo[j].spoildate.tv_sec = shm_ptr_porto_aval[i].spoildate.tv_sec;
-								cargo[j].spoildate.tv_usec = shm_ptr_porto_aval[i].spoildate.tv_usec;
-								cargocapacity_free = 0;
-								j = max_slots;
-							}
+
+						if(shm_ptr_porto_aval[i].qty > splitton) {
+							loadCargo2(cargo, shm_ptr_porto_aval[i].type, splitton, shm_ptr_porto_aval[i].spoildate, max_slots);
+							shm_ptr_porto_aval[i].qty -= splitton;
+							tonstomove += splitton;
+							cargocapacity_free -= splitton;
+							flag = 1;
+						} else {
+							loadCargo(cargo, shm_ptr_porto_aval[i], max_slots);
+							cargocapacity_free -= shm_ptr_porto_aval[i].qty;
+							tonstomove += shm_ptr_porto_aval[i].qty;
+							shm_ptr_porto_aval[i].type = -1;
+							shm_ptr_porto_aval[i].qty = -1;
+							flag = 1;
 						}
 					}
+				}
+				if(cargocapacity_free <= 0) {
+					flag = 0;
 				}
 			}
 
@@ -308,6 +281,64 @@ void removeSpoiled(struct merce *available, int naveid) {
 			}
 		}
 	}
+}
+
+void loadCargo(struct merce * cargo, struct merce mercetoload, int max_slots) {
+	for(int i = 0; i < max_slots; i++) {
+		if(cargo[i].type == mercetoload.type && cargo[i].spoildate.tv_sec == mercetoload.spoildate.tv_sec && cargo[i].spoildate.tv_usec == mercetoload.spoildate.tv_usec) {
+			cargo[i].qty += mercetoload.qty;
+			return 1;
+		}
+		if(cargo[i].type <= 0) {
+			cargo[i] = mercetoload;
+			return 1;
+		}
+	}
+	return 0;
+}
+
+void loadCargo2(struct merce * cargo, int type, int qty, struct timeval spoildate, int max_slots) {
+	for(int i = 0; i < max_slots; i++) {
+		if(cargo[i].type == type && cargo[i].spoildate.tv_sec == spoildate.tv_sec && cargo[i].spoildate.tv_usec == spoildate.tv_usec) {
+			cargo[i].qty += qty;
+			return 1;
+		}
+		if(cargo[i].type <= 0) {
+			cargo[i].type = type;
+			cargo[i].qty = qty;
+			cargo[i].spoildate = spoildate;
+			return 1;
+		}
+	}
+	return 0;
+}
+
+int unloadCargo(struct merce * cargo, int * requests, int max_slots, int num_merci) {
+	int tonstomove = 0;
+	for(int i = 0; i < max_slots; i++) {
+		if(cargo[i].type < 0) {
+			return 0;
+		} else {
+			if(cargo[i].type > 0 && cargo[i].qty > 0) {
+				if(cargo[i].qty >= requests[cargo[i].type]) {
+					cargo[i].qty -= requests[cargo[i].type];
+					if(cargo[i].qty == 0) {
+						cargo[i].type = -1;
+					}
+					requests[cargo[i].type + num_merci] += requests[cargo[i].type];
+					tonstomove += requests[cargo[i].type];
+					requests[cargo[i].type] = -1;
+				} else {
+					requests[cargo[i].type] -= cargo[i].qty;
+					requests[cargo[i].type + num_merci] += cargo[i].qty;
+					tonstomove += cargo[i].qty;
+					cargo[i].type = -1;
+					cargo[i].qty = -1;
+				}
+			}
+		}
+	}
+	return tonstomove;
 }
 
 void sleepForStorm() {

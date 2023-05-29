@@ -12,9 +12,7 @@
 
 int port_id;
 
-void sighandler() {
-	printf("SEGNALE RICEVUTO DA PORTO\n");
-}
+void reporthandler();
 
 
 int main (int argc, char * argv[]) {
@@ -75,7 +73,7 @@ int main (int argc, char * argv[]) {
 		semop(sem_id, &sops, 1);
 	}*/
 
-	signal(SIGUSR2, sighandler);
+	signal(SIGUSR2, reporthandler);
 
 	//start handling ships
 	int occupied_docks = 0;
@@ -178,4 +176,8 @@ void removeSpoiled(struct merce *available, int portid, int limit) {
 			}
 		}
 	}
+}
+
+void reporthandler() {
+	
 }
