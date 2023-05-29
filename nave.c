@@ -10,23 +10,22 @@
 #include <signal.h>
 #include "merce.h"
 
-int storm = 0;
 int stormduration;
+long stormtosleep = -1;
 int end = 0;
 int currentplace = 0;	//sea = 0 port = 1
 int hascargo = 0;	//no = 0 yes = 1
 
-void sighandler() {
-	storm = 1;
-}
+int master_msgq;
+int shipid;
 
+void stormhandler();
+void reporthandler();
 void sleepForStorm();
 
 int main (int argc, char * argv[]) {
-	struct mesg_buffer {
-    	long mesg_type;
-    	char mesg_text[100];
-	};
+	master_msgq =atoi(argv[6]);
+	shipid = atoi(argv[2]);
 	struct mesg_buffer message;
 	struct position pos;
 	double speed = atoi(argv[5]);
@@ -56,6 +55,7 @@ int main (int argc, char * argv[]) {
 	int fill;
 	int loadtime;
 	int tonstomove = 0;
+	long sleeptime;
 
 	struct merce *cargo = malloc(max_slots * sizeof(struct merce));
 	int cargocapacity = atoi(argv[7]);
@@ -70,13 +70,14 @@ int main (int argc, char * argv[]) {
 	int randomportflag = 0;
 	message.mesg_type = 1;
 
-	signal(SIGUSR1, sighandler);
+	signal(SIGUSR1, stormhandler);
+	signal(SIGUSR2, reporthandler);
 
 	//ship loop, will last until interrupted by an external process
 	while(1) {
 		//ask master the closest port that asks for my largest merce
 		sleep(1);
-		removeSpoiled(cargo, atoi(argv[2]));
+		removeSpoiled(cargo, shipid);
 		strcpy(message.mesg_text, argv[2]);
 		strcat(message.mesg_text, ":");
 		sprintf(posx_str, "%f", pos.x);
@@ -92,7 +93,7 @@ int main (int argc, char * argv[]) {
 			randomportflag = 0;
 			strcat(message.mesg_text, "0");
 		}
-		msgsnd(atoi(argv[6]), &message, (sizeof(long) + sizeof(char) * 100), 0);
+		msgsnd(master_msgq, &message, (sizeof(long) + sizeof(char) * 100), 0);
 
 		//wait for master answer
 		msgrcv(atoi(argv[1]), &message, (sizeof(long) + sizeof(char) * 100), 1, 0);
@@ -110,7 +111,10 @@ int main (int argc, char * argv[]) {
 		tv1.tv_sec = (int) ((traveltime - tv1.tv_nsec) / 1000000000);
 		printf("SHIP %s SETTING COURSE TO %s %s, ETA: %d,%ld DAYS\n", argv[2], destx, desty, tv1.tv_sec, tv1.tv_nsec);
 		//travel
-		nanosleep(&tv1, &tv2);
+		while(nanosleep(&tv1, &tv2) == -1) {
+			sleepForStorm();
+			tv1 = tv2;
+		}
 		pos.x = dest.x;
 		pos.y = dest.y;
 		strcpy(posx_str, destx);
@@ -135,7 +139,8 @@ int main (int argc, char * argv[]) {
 		//decide what to do based on port answer
 		if(strcmp(text, "accept") == 0) {
 			//if port accepted the request, start loading and unloading cargo
-			removeSpoiled(cargo, atoi(argv[2]));
+			currentplace = 1;
+			removeSpoiled(cargo, shipid);
 			if((int *) (shm_ptr_porto_req = (int *) shmat(atoi(shm_id_porto_req), NULL, 0)) == -1) {
 				printf("*** shmat error nave req ***\n");
 				exit(1);
@@ -144,6 +149,9 @@ int main (int argc, char * argv[]) {
 				printf("*** shmat error nave aval ***\n");
 				exit(1);
 			}
+
+			tonstomove = 0;
+
 			for(int k = 0; k < max_slots; k++) {
 				if(cargo[k].type == 0) {
 					k = max_slots;
@@ -152,6 +160,7 @@ int main (int argc, char * argv[]) {
 						if(cargo[k].qty >= shm_ptr_porto_req[cargo[k].type]) {
 							shm_ptr_porto_req[cargo[k].type + num_merci - 1] += shm_ptr_porto_req[cargo[k].type];
 							cargo[k].qty -= shm_ptr_porto_req[cargo[k].type];
+							tonstomove += shm_ptr_porto_req[cargo[k].type];
 							shm_ptr_porto_req[cargo[k].type] = 0;
 							if(cargo[k].qty == 0) {
 								cargo[k].type = -1;
@@ -159,6 +168,7 @@ int main (int argc, char * argv[]) {
 						} else {
 							shm_ptr_porto_req[cargo[k].type + num_merci - 1] += cargo[k].qty;
 							shm_ptr_porto_req[cargo[k].type] -= cargo[k].qty;
+							tonstomove += cargo[k].qty;
 							cargo[k].qty = 0;
 							cargo[k].type = -1;
 						}
@@ -185,6 +195,7 @@ int main (int argc, char * argv[]) {
 								cargo[j].qty = shm_ptr_porto_aval[i].qty;
 								cargo[j].spoildate.tv_sec = shm_ptr_porto_aval[i].spoildate.tv_sec;
 								cargo[j].spoildate.tv_usec = shm_ptr_porto_aval[i].spoildate.tv_usec;
+								tonstomove += cargo[j].qty;
 								cargocapacity_free -= cargo[j].qty;
 								shm_ptr_porto_aval[i].type = -1;
 								shm_ptr_porto_aval[i].qty = 0;
@@ -198,6 +209,7 @@ int main (int argc, char * argv[]) {
 								cargo[j].type = shm_ptr_porto_aval[i].type;
 								shm_ptr_porto_aval[i].qty -= cargocapacity_free;
 								cargo[j].qty = cargocapacity_free;
+								tonstomove += cargo[j].qty;
 								cargo[j].spoildate.tv_sec = shm_ptr_porto_aval[i].spoildate.tv_sec;
 								cargo[j].spoildate.tv_usec = shm_ptr_porto_aval[i].spoildate.tv_usec;
 								cargocapacity_free = 0;
@@ -208,19 +220,36 @@ int main (int argc, char * argv[]) {
 				}
 			}
 
+			//sleep for loadtime * tonstomove
+			if(tonstomove > 0) {
+				sleeptime = (long) (tonstomove / loadtime * 1000000000);
+				tv1.tv_nsec = sleeptime % 1000000000;
+				tv1.tv_sec = (int) ((sleeptime - tv1.tv_nsec) / 1000000000);
+				printf("SHIP %s LOADING/OFFLOADING %d TONS, ETA: %d.%ld DAYS\n", argv[2], tonstomove, tv1.tv_sec, tv1.tv_nsec);
+				skipStorm(tv1.tv_sec, tv1.tv_nsec);
+				while(nanosleep(&tv1, &tv2) == -1) {
+					skipStorm(tv2.tv_sec, tv2.tv_nsec);
+					tv1 = tv2;
+				}
+			}
+
 			strcpy(message.mesg_text, "dockfree");
 			strcat(message.mesg_text, ":");
 			strcat(message.mesg_text, argv[1]);
 			msgsnd(atoi(msgq_id_porto), &message, (sizeof(long) + sizeof(char) * 100), 0);
 			//aspetto risposta da porto prima ti ripartire
 			msgrcv(atoi(argv[1]), &message, (sizeof(long) + sizeof(char) * 100), 1, 0);
+			currentplace = 0;
 			printf("RIPARTITA\n");
 
+			hascargo = 0;
 			printf("SHIP %s CARGO: |", argv[2]);
 			for(int i = 0; i < max_slots; i++) {
 				if(cargo[i].type == 0) {
 					i = max_slots;
 				} else if(cargo[i].qty > 0 && cargo[i].type > 0) {
+					//i = max_slots;
+					hascargo = 1;
 					printf(" %d TONS OF %d |", cargo[i].qty, cargo[i].type);
 				}
 			}
@@ -259,12 +288,12 @@ void removeSpoiled(struct merce *available, int naveid) {
 	for(int i = 0; i < 20; i++) {
 		if(available[i].type > 0 && available[i].qty > 0) {
 			if(available[i].spoildate.tv_sec < currenttime.tv_sec) {
-				//printf("REMOVED %d TONS OF %d FROM SHIP %d DUE TO SPOILAGE\n", available[i].qty, available[i].type, naveid);
+				printf("REMOVED %d TONS OF %d FROM SHIP %d DUE TO SPOILAGE\n", available[i].qty, available[i].type, naveid);
 				available[i].type = 0;
 				available[i].qty = 0;
 			} else if(available[i].spoildate.tv_sec == currenttime.tv_sec) {
 				if(available[i].spoildate.tv_usec <= currenttime.tv_usec) {
-				//printf("REMOVED %d TONS OF %d FROM SHIP %d DUE TO SPOILAGE\n", available[i].qty, available[i].type, naveid);
+				printf("REMOVED %d TONS OF %d FROM SHIP %d DUE TO SPOILAGE\n", available[i].qty, available[i].type, naveid);
 					available[i].type = 0;
 					available[i].qty = 0;
 				}
@@ -274,14 +303,56 @@ void removeSpoiled(struct merce *available, int naveid) {
 }
 
 void sleepForStorm() {
-	if(storm > 0) {
-		storm = 0;
-
+	if(stormtosleep > 0) {
 		printf("STORM! SLEEPING FOR %d HOURS\n", stormduration);
-		long sleeplong;
-		struct timespec sleep;
-		sleeplong = (long) (stormduration * 41666666);
-		sleep.tv_nsec = stormduration % 1000000000;
-		sleep.tv_sec = (int) (sleeplong - sleep.tv_nsec) / 1000000000;
+		struct timespec sleep, sleepremaining;
+		sleep.tv_nsec = stormtosleep % 1000000000;
+		sleep.tv_sec = (int) ((stormtosleep - sleep.tv_nsec) / 1000000000);
+		stormtosleep = 0;
+		while(nanosleep(&sleep, &sleepremaining) == -1) {
+			if(stormtosleep > 0) {
+				sleepremaining.tv_nsec += stormtosleep % 1000000000;
+				sleepremaining.tv_sec += (int) ((stormtosleep - sleep.tv_nsec) / 1000000000);
+			}
+			sleep = sleepremaining;
+		}
 	}
+}
+
+void skipStorm(int secs, long nanosecs) {
+	if(stormduration > 0) {
+		printf("STORM WHILE IN PORT\n");
+		stormtosleep -= (secs * 1000000000) + nanosecs;
+	}
+}
+
+void stormhandler() {
+	if(stormtosleep <= 0) {
+		stormtosleep = stormduration;
+	} else {
+		stormtosleep += stormduration;
+	}
+}
+
+void reporthandler() {
+	struct mesg_buffer message;
+	message.mesg_type = 1;
+	char temp[20];
+
+	strcpy(message.mesg_text, "s");
+	strcat(message.mesg_text, ":");
+	sprintf(temp, "%d", shipid);
+	strcat(message.mesg_text, temp);
+	strcat(message.mesg_text, ":");
+	if(currentplace == 0) {
+		if(hascargo == 1) {
+			strcat(message.mesg_text, "0");		//s:id:0	in sea with cargo
+		} else {
+			strcat(message.mesg_text, "1");		//s:id:1	in sea without cargo
+		}
+	} else {
+		strcat(message.mesg_text, "2");			//s:id:2	in port
+	}
+
+	msgsnd(master_msgq, &message, (sizeof(long) + sizeof(char) * 100), 0);
 }

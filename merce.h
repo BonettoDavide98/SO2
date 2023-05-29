@@ -10,6 +10,11 @@ struct position {
     double x;
     double y;
 };
+	
+struct mesg_buffer {
+   	long mesg_type;
+   	char mesg_text[100];
+};
 
 struct parameters {
     int SO_NAVI;

@@ -168,7 +168,6 @@ int main (int argc, char ** argv) {
 					gettimeofday(&ports_shm_ptr_aval[i][a].spoildate, NULL);
 					ports_shm_ptr_aval[i][a].spoildate.tv_sec += rand() % (parameters.SO_MAX_VITA - parameters.SO_MIN_VITA);
 					printf("ADDED %d TONS OF %d TO PORT %d\n", temparray[j], j, i);
-					printf("%d %d\n", ports_shm_ptr_aval[i][a].qty, ports_shm_ptr_aval[i][a].type);
 					a += 1;
 					break;
 				case 1:
@@ -275,28 +274,32 @@ int main (int argc, char ** argv) {
 	//handle messages
 	while(1) {
 		msgrcv(master_msgq, &message, (sizeof(long) + sizeof(char) * 100), 1, 0);
-		strcpy(idin, strtok(message.mesg_text, ":"));
-		strcpy(posx_str, strtok(NULL, ":"));
-		strcpy(posy_str, strtok(NULL, ":"));
-		strcpy(merce, strtok(NULL, ":"));
-		printf("MASTER PARSED ID: %s, POSX: %s, POSY: %s, MERCE: %s\n", idin, posx_str, posy_str, merce);
-		kill(kid_pids[atoi(idin) + parameters.SO_PORTI], SIGUSR1);
-		idfind = getRequesting(posx_str, posy_str, ports_positions, ports_shm_ptr_req, atoi(merce), parameters.SO_PORTI);
 
-		message.mesg_type = 1;
-		if(idfind < 0) {
-			strcpy(message.mesg_text, "terminate");
-			msgsnd(msgqueue_nave[atoi(idin)], &message, (sizeof(long) + sizeof(char) * 100), 0);
+		switch(message.mesg_text[0]) {
+			case 's' :
+				printf("STATUS: %s\n", message.mesg_text);
+				break;
+			default :
+				strcpy(idin, strtok(message.mesg_text, ":"));
+				strcpy(posx_str, strtok(NULL, ":"));
+				strcpy(posy_str, strtok(NULL, ":"));
+				strcpy(merce, strtok(NULL, ":"));
+				printf("MASTER PARSED ID: %s, POSX: %s, POSY: %s, MERCE: %s\n", idin, posx_str, posy_str, merce);
+				kill(kid_pids[atoi(idin) + parameters.SO_PORTI], SIGUSR2);
+				idfind = getRequesting(posx_str, posy_str, ports_positions, ports_shm_ptr_req, atoi(merce), parameters.SO_PORTI, parameters.SO_MERCI);
+
+				message.mesg_type = 1;
+				sprintf(x, "%f", ports_positions[idfind].x);
+				sprintf(y, "%f", ports_positions[idfind].y);
+				sprintf(msgq_id_str, "%d", msgqueue_porto[idfind]);
+				strcpy(message.mesg_text, msgq_id_str);
+				strcat(message.mesg_text, ":");
+				strcat(message.mesg_text, x);
+				strcat(message.mesg_text, ":");
+				strcat(message.mesg_text, y);
+				msgsnd(msgqueue_nave[atoi(idin)], &message, (sizeof(long) + sizeof(char) * 100), 0);
+				break;
 		}
-		sprintf(x, "%f", ports_positions[idfind].x);
-		sprintf(y, "%f", ports_positions[idfind].y);
-		sprintf(msgq_id_str, "%d", msgqueue_porto[idfind]);
-		strcpy(message.mesg_text, msgq_id_str);
-		strcat(message.mesg_text, ":");
-		strcat(message.mesg_text, x);
-		strcat(message.mesg_text, ":");
-		strcat(message.mesg_text, y);
-		msgsnd(msgqueue_nave[atoi(idin)], &message, (sizeof(long) + sizeof(char) * 100), 0);
 	}
 
 	while((child_pid = wait(&status)) != -1) {
@@ -321,7 +324,12 @@ int main (int argc, char ** argv) {
 }
 
 //gets the closed port that has a request for the specified merce; if the merce is not specified or no port has a request for it returns a random port
-int getRequesting(char *posx_s, char *posy_s, struct position * portpositions, struct merce ** portsrequests, int merce, int nporti) {
+int getRequesting(char *posx_s, char *posy_s, struct position * portpositions, int ** portsrequests, int merce, int nporti, int nmerci) {
+	if(merce == 0) {
+		printf("NO MERCE SPECIFIED, RETURNING RANDOM PORT\n");
+		return rand() % nporti;
+	}
+	
 	struct position currpos;
 	struct position minpos;
 	minpos.x = 1000000;
@@ -330,27 +338,20 @@ int getRequesting(char *posx_s, char *posy_s, struct position * portpositions, s
 	sscanf(posy_s, "%lf", &currpos.y);
 	int imin = 0;
 	for(int i = 0; i < nporti; i++) {
-		//printf("CHECKING PORT %d:\n", i);
-		for(int j = 0; j < 50 && portsrequests[i][j].type > 0; j++) {
 		//printf("REQUEST %d: TYPE: %d QTY: %d\n", j, portsrequests[i][j].type, portsrequests[i][j].qty);
-			if(portsrequests[i][j].type == merce && portsrequests[i][j].qty > 0) {
-				if(sqrt(pow((portpositions[i].x - currpos.x),2) + pow((portpositions[i].y - currpos.y),2)) < sqrt(pow((minpos.x - currpos.x),2) + pow((minpos.y - currpos.y),2))) {
-					imin = i;
-					minpos.x = portpositions[i].x;
-					minpos.y = portpositions[i].y;
-				}
+		if(portsrequests[i][merce] > 0) {
+			if(sqrt(pow((portpositions[i].x - currpos.x),2) + pow((portpositions[i].y - currpos.y),2)) < sqrt(pow((minpos.x - currpos.x),2) + pow((minpos.y - currpos.y),2))) {
+				imin = i;
+				minpos.x = portpositions[i].x;
+				minpos.y = portpositions[i].y;
 			}
 		}
 	}
-	if(merce == 0) {
-		//printf("NO MERCE SPECIFIED, RETURNING RANDOM PORT\n");
-		return rand() % nporti;
-	}
 	if(imin >= 0) {
-		//printf("FOUND CLOSEST PORT %d REQUESTING MERCE %d\n", imin, merce);
+		printf("FOUND CLOSEST PORT %d REQUESTING MERCE %d\n", imin, merce);
 		return imin;
 	}
-	//printf("NO REQUESTS OF MERCE %d, RETURNING RANDOM PORT\n", merce);
+	printf("NO REQUESTS OF MERCE %d, RETURNING RANDOM PORT\n", merce);
 	return rand() % nporti;
 }
 
