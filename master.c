@@ -335,7 +335,39 @@ int main (int argc, char ** argv) {
 				for(int i = 0; i < parameters.SO_NAVI + parameters.SO_PORTI; i++) {
 					kill(kid_pids[i], SIGUSR2);
 				}
+
+				//add merci at random
+				int *temparray = malloc((parameters.SO_MERCI + 1) * sizeof(int));
+				for(int j = 0; j < parameters.SO_MERCI + 1; j++) {
+					temparray[j] = 0;
+				}
+
+				tot = 0;
 				
+				while(tot + parameters.SO_SIZE <= parameters.SO_FILL/parameters.SO_DAYS) {
+					temp = 1 + (rand() % parameters.SO_SIZE);
+					temparray[1 + (rand() % parameters.SO_MERCI)] += temp;
+					tot += temp;
+				}
+
+				for(int j = 1; j <= parameters.SO_MERCI; j++) {
+					a = rand() % parameters.SO_PORTI;
+					int c = a;
+					do {
+						c++;
+						if(c >= parameters.SO_PORTI) {
+							c = 0;
+						}
+
+						if(ports_shm_ptr_req[c][j] <= 0) {
+							addMerceToPort(temparray[j], j, parameters.SO_MAX_VITA, parameters.SO_MIN_VITA, ports_shm_ptr_aval[c], day * parameters.SO_MERCI);
+							break;
+						}
+					} while(c != a);
+				}
+				free(temparray);
+				
+				//count total avaiable merci
 				for(int i = 0; i < parameters.SO_PORTI; i++) {
 					for(int j = 0; j < parameters.SO_MERCI * (day + 1); j++) {
 						if(ports_shm_ptr_aval[i][j].type == 0) {
@@ -346,6 +378,7 @@ int main (int argc, char ** argv) {
 					}
 				}
 
+				//print report
 				printf("-----------------------------------\n");
 				printf("DAY %d REPORT\n", day);
 				printf("SHIP BY SEA WITHOUT CARGO: %d\n", reports[day].seawithoutcargo);
@@ -433,6 +466,17 @@ int getRequesting(char *posx_s, char *posy_s, struct position * portpositions, i
 	}
 	printf("NO REQUESTS OF MERCE %d, RETURNING RANDOM PORT\n", merce);
 	return rand() % nporti;
+}
+
+void addMerceToPort(int qty, int type, int max_vita, int min_vita, struct merce * port, int limit) {
+	for(int i = 0; i < limit; i++) {
+		if(port[i].type <= 0) {
+			port[i].qty = qty;
+			port[i].type = type;
+			gettimeofday(&port[i].spoildate, NULL);
+			port[i].spoildate.tv_sec += rand() % (max_vita - min_vita);
+		}
+	}
 }
 
 //load parameters from an input file; parameters must be separated by comma
