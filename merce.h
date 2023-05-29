@@ -46,6 +46,6 @@ struct portstatus {
     int mercepresent;
     int mercesent;
     int mercereceived;
-    int banksocc;
-    int bankstot;
+    int docksocc;
+    int dockstot;
 };

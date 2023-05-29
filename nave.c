@@ -179,15 +179,15 @@ int main (int argc, char * argv[]) {
 						}
 
 						if(shm_ptr_porto_aval[i].qty > splitton) {
-							loadCargo2(cargo, shm_ptr_porto_aval[i].type, splitton, shm_ptr_porto_aval[i].spoildate, max_slots);
+							tonstomove += loadCargo2(cargo, shm_ptr_porto_aval[i].type, splitton, shm_ptr_porto_aval[i].spoildate, max_slots);
 							shm_ptr_porto_aval[i].qty -= splitton;
-							tonstomove += splitton;
 							cargocapacity_free -= splitton;
+							shm_ptr_porto_req[shm_ptr_porto_aval[i].type + (num_merci * 2)] += splitton;
 							flag = 1;
 						} else {
-							loadCargo(cargo, shm_ptr_porto_aval[i], max_slots);
+							tonstomove += loadCargo(cargo, shm_ptr_porto_aval[i], max_slots);
 							cargocapacity_free -= shm_ptr_porto_aval[i].qty;
-							tonstomove += shm_ptr_porto_aval[i].qty;
+							shm_ptr_porto_req[shm_ptr_porto_aval[i].type + (num_merci * 2)] += shm_ptr_porto_aval[i].qty;
 							shm_ptr_porto_aval[i].type = -1;
 							shm_ptr_porto_aval[i].qty = -1;
 							flag = 1;
@@ -283,31 +283,31 @@ void removeSpoiled(struct merce *available, int naveid) {
 	}
 }
 
-void loadCargo(struct merce * cargo, struct merce mercetoload, int max_slots) {
+int loadCargo(struct merce * cargo, struct merce mercetoload, int max_slots) {
 	for(int i = 0; i < max_slots; i++) {
 		if(cargo[i].type == mercetoload.type && cargo[i].spoildate.tv_sec == mercetoload.spoildate.tv_sec && cargo[i].spoildate.tv_usec == mercetoload.spoildate.tv_usec) {
 			cargo[i].qty += mercetoload.qty;
-			return 1;
+			return mercetoload.qty;
 		}
 		if(cargo[i].type <= 0) {
 			cargo[i] = mercetoload;
-			return 1;
+			return mercetoload.qty;
 		}
 	}
 	return 0;
 }
 
-void loadCargo2(struct merce * cargo, int type, int qty, struct timeval spoildate, int max_slots) {
+int loadCargo2(struct merce * cargo, int type, int qty, struct timeval spoildate, int max_slots) {
 	for(int i = 0; i < max_slots; i++) {
 		if(cargo[i].type == type && cargo[i].spoildate.tv_sec == spoildate.tv_sec && cargo[i].spoildate.tv_usec == spoildate.tv_usec) {
 			cargo[i].qty += qty;
-			return 1;
+			return qty;
 		}
 		if(cargo[i].type <= 0) {
 			cargo[i].type = type;
 			cargo[i].qty = qty;
 			cargo[i].spoildate = spoildate;
-			return 1;
+			return qty;
 		}
 	}
 	return 0;

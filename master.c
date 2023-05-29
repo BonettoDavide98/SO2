@@ -49,8 +49,8 @@ int main (int argc, char ** argv) {
 			reports[i].ports[j].mercepresent = 0;
 			reports[i].ports[j].mercesent = 0;
 			reports[i].ports[j].mercereceived = 0;
-			reports[i].ports[j].banksocc = 0;
-			reports[i].ports[j].bankstot = 0;
+			reports[i].ports[j].docksocc = 0;
+			reports[i].ports[j].dockstot = 0;
 		}
 	}
 
@@ -59,7 +59,7 @@ int main (int argc, char ** argv) {
 	int sem_id, status;
 	pid_t child_pid, *kid_pids;
 	struct sembuf sops;
-    char *args[13];
+    char *args[14];
 	char *argss[11];
 	char *argst[6];
 	int *ports_shm_id_aval = malloc(parameters.SO_PORTI * sizeof(ports_shm_id_aval));
@@ -75,7 +75,7 @@ int main (int argc, char ** argv) {
 
 	srand(time(NULL));
 
-	for(int i = 0; i < 13; i++) {
+	for(int i = 0; i < 14; i++) {
 		args[i] = malloc(20);
 	}
 
@@ -214,7 +214,8 @@ int main (int argc, char ** argv) {
 		sprintf(args[9], "%d", parameters.SO_FILL);
 		sprintf(args[10], "%d", parameters.SO_LOADSPEED);
 		sprintf(args[11], "%d", (parameters.SO_MERCI + 1));
-    	args[12] = NULL;
+		sprintf(args[12], "%d", master_msgq);
+    	args[13] = NULL;
 
 		switch(kid_pids[i] = fork()) {
 			case -1:
@@ -285,6 +286,7 @@ int main (int argc, char ** argv) {
 	char y[20];
 	char dayr[3];
 	char tempstr[20];
+	char portid[20];
 
 	//handle messages
 	while(1) {
@@ -292,7 +294,7 @@ int main (int argc, char ** argv) {
 			//loop until message is receiveds
 		} 
 		switch(message.mesg_text[0]) {
-			case 's' :
+			case 's':
 				//printf("--------- in s\n");
 				//printf("STATUS: %s\n", message.mesg_text);
 				strtok(message.mesg_text, ":");
@@ -312,12 +314,41 @@ int main (int argc, char ** argv) {
 						break;
 				}
 				break;
+			case 'p':
+				strtok(message.mesg_text, ":");
+				strcpy(portid, strtok(NULL, ":"));
+				strcpy(dayr, strtok(NULL, ":"));
+				strcpy(tempstr, strtok(NULL, ":"));
+				reports[atoi(dayr)].ports[atoi(portid)].mercesent = atoi(tempstr);
+				strcpy(tempstr, strtok(NULL, ":"));
+				reports[atoi(dayr)].ports[atoi(portid)].mercereceived = atoi(tempstr);
+				strcpy(tempstr, strtok(NULL, ":"));
+				reports[atoi(dayr)].ports[atoi(portid)].dockstot = atoi(tempstr);
+				strcpy(tempstr, strtok(NULL, ":"));
+				reports[atoi(dayr)].ports[atoi(portid)].docksocc = atoi(tempstr);
+				break;
 			case 'd':
 				//printf("--------- in d\n");
 				//printf("----------DAY PASSED----------\n");
 				for(int i = 0; i < parameters.SO_NAVI + parameters.SO_PORTI; i++) {
 					kill(kid_pids[i], SIGUSR2);
 				}
+				/*for(int i = 0; i < parameters.SO_PORTI; i++) {
+					for(int j = 0)
+				}*/
+
+				printf("-----------------------------------\n");
+				printf("DAY %d REPORT\n", day);
+				printf("SHIP BY SEA WITHOUT CARGO: %d\n", reports[day].seawithoutcargo);
+				printf("SHIP BY SEA WITH CARGO: %d\n", reports[day].seawithcargo);
+				printf("SHIP DOCKED: %d\n", reports[day].docked);
+				for(int i = 0; i < parameters.SO_PORTI; i++) {
+					printf("PORT %d HAS SENT\t%d TONS OF MERCE\n", i, reports[day].ports[i].mercesent);
+					printf("PORT %d HAS RECEIVED\t%d TONS OF MERCE\n", i, reports[day].ports[i].mercereceived);
+					printf("PORT %d HAS %d OCCUPIED DOCKS OUT OF %d\n", i, reports[day].ports[i].docksocc, reports[day].ports[i].dockstot);
+				}
+				
+				day++;
 				break;
 			default :
 				//printf("--------- in default\n");

@@ -11,6 +11,12 @@
 #include "merce.h"
 
 int port_id;
+int master_msgq;
+int num_merci;
+int *shm_ptr_req;
+int day = 0;
+int docks;
+int occupied_docks;
 
 void reporthandler();
 
@@ -25,15 +31,15 @@ int main (int argc, char * argv[]) {
 
 	struct mesg_buffer message; 
 	port_id = atoi(argv[4]);
-	int docks = 1 + (rand() % atoi(argv[7]));
+	docks = 1 + (rand() % atoi(argv[7]));
 	int shm_id_aval, shm_id_req;
 	int sem_id = atoi(argv[2]);
 	int msgq_porto = atoi(argv[3]);
 	int fill = atoi(argv[9]);
 	int loadtime = atoi(argv[10]);
 	struct merce *shm_ptr_aval;
-	int *shm_ptr_req;
-	int num_merci = atoi(argv[11]);
+	num_merci = atoi(argv[11]);
+	master_msgq = atoi(argv[12]);
 	key_t mem_key;
 	struct sembuf sops;
 	struct merce *available;
@@ -76,7 +82,7 @@ int main (int argc, char * argv[]) {
 	signal(SIGUSR2, reporthandler);
 
 	//start handling ships
-	int occupied_docks = 0;
+	occupied_docks = 0;
 	char ship_id[30];
 	char operation[20];
 	char text[20];
@@ -179,5 +185,39 @@ void removeSpoiled(struct merce *available, int portid, int limit) {
 }
 
 void reporthandler() {
-	
+	struct mesg_buffer message;
+	message.mesg_type = 1;
+	char temp[20];
+	int tot = 0;
+
+	day++;
+
+	strcpy(message.mesg_text, "p");
+	strcat(message.mesg_text, ":");
+	sprintf(temp, "%d", port_id);		//port id
+	strcat(message.mesg_text, temp);
+	strcat(message.mesg_text, ":");
+	sprintf(temp, "%d", day);			//current day
+	strcat(message.mesg_text, temp);
+	strcat(message.mesg_text, ":");
+	for(int i = (num_merci * 2) + 1; i <= (num_merci * 3); i++) {
+		tot += shm_ptr_req[i];
+	}
+	sprintf(temp, "%d", tot);
+	strcat(message.mesg_text, temp);
+	tot = 0;
+	strcat(message.mesg_text, ":");		//merce sent
+	for(int i = num_merci + 1; i <= (num_merci * 2); i++) {
+		tot += shm_ptr_req[i];
+	}
+	sprintf(temp, "%d", tot);
+	strcat(message.mesg_text, temp);	//merce received
+	strcat(message.mesg_text, ":");
+	sprintf(temp, "%d", docks);
+	strcat(message.mesg_text, temp);	//total docks
+	strcat(message.mesg_text, ":");
+	sprintf(temp, "%d", occupied_docks);
+	strcat(message.mesg_text, temp);	//occupied docks
+
+	msgsnd(master_msgq, &message, (sizeof(long) + sizeof(char) * 100), 0);
 }
