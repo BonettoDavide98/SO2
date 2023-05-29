@@ -9,6 +9,7 @@
 #include <math.h>
 #include <sys/time.h>
 #include <signal.h>
+#include <time.h>
 #include "merce.h"
 
 #define MAX_DAYS 30
@@ -200,6 +201,7 @@ int main (int argc, char ** argv) {
 		}
 	}
 
+	int random;
 	//start port processes
 	for(int i = 0; i < parameters.SO_PORTI; i++) {
 		strcpy(args[0], PORTO);
@@ -209,7 +211,7 @@ int main (int argc, char ** argv) {
 		sprintf(args[4], "%d", i);
 		sprintf(args[5], "%f", ports_positions[i].x);
 		sprintf(args[6], "%f", ports_positions[i].y);
-		sprintf(args[7], "%d", parameters.SO_BANCHINE);
+		sprintf(args[7], "%d", 1 + (rand() % parameters.SO_BANCHINE));
 		sprintf(args[8], "%d", ports_shm_id_req[i]);
 		sprintf(args[9], "%d", parameters.SO_FILL);
 		sprintf(args[10], "%d", parameters.SO_LOADSPEED);
@@ -333,9 +335,16 @@ int main (int argc, char ** argv) {
 				for(int i = 0; i < parameters.SO_NAVI + parameters.SO_PORTI; i++) {
 					kill(kid_pids[i], SIGUSR2);
 				}
-				/*for(int i = 0; i < parameters.SO_PORTI; i++) {
-					for(int j = 0)
-				}*/
+				
+				for(int i = 0; i < parameters.SO_PORTI; i++) {
+					for(int j = 0; j < parameters.SO_MERCI * (day + 1); j++) {
+						if(ports_shm_ptr_aval[i][j].type == 0) {
+							j = parameters.SO_MERCI * (day + 1);
+						} else if(ports_shm_ptr_aval[i][j].type > 0 && ports_shm_ptr_aval[i][j].qty > 0) {
+							reports[day].ports[i].mercepresent += ports_shm_ptr_aval[i][j].qty;
+						}
+					}
+				}
 
 				printf("-----------------------------------\n");
 				printf("DAY %d REPORT\n", day);
@@ -343,9 +352,10 @@ int main (int argc, char ** argv) {
 				printf("SHIP BY SEA WITH CARGO: %d\n", reports[day].seawithcargo);
 				printf("SHIP DOCKED: %d\n", reports[day].docked);
 				for(int i = 0; i < parameters.SO_PORTI; i++) {
-					printf("PORT %d HAS SENT\t%d TONS OF MERCE\n", i, reports[day].ports[i].mercesent);
-					printf("PORT %d HAS RECEIVED\t%d TONS OF MERCE\n", i, reports[day].ports[i].mercereceived);
-					printf("PORT %d HAS %d OCCUPIED DOCKS OUT OF %d\n", i, reports[day].ports[i].docksocc, reports[day].ports[i].dockstot);
+					printf("PORT %d: %d TONS OF MERCE AVAILABLE | ", i, reports[day].ports[i].mercepresent);
+					printf("SENT %d TONS OF MERCE | ", reports[day].ports[i].mercesent);
+					printf("RECEIVED %d TONS OF MERCE | ", reports[day].ports[i].mercereceived);
+					printf("%d/%d OCCUPIED DOCKS\n", reports[day].ports[i].docksocc, reports[day].ports[i].dockstot);
 				}
 				
 				day++;

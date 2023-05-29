@@ -27,11 +27,9 @@ int main (int argc, char * argv[]) {
     	char mesg_text[100];
 	};
 
-	srand(time(NULL));
-
 	struct mesg_buffer message; 
 	port_id = atoi(argv[4]);
-	docks = 1 + (rand() % atoi(argv[7]));
+	docks = atoi(argv[7]);
 	int shm_id_aval, shm_id_req;
 	int sem_id = atoi(argv[2]);
 	int msgq_porto = atoi(argv[3]);
