@@ -75,7 +75,7 @@ int main (int argc, char * argv[]) {
 		semop(sem_id, &sops, 1);
 	}*/
 
-	signal(SIGUSR1, sighandler);
+	signal(SIGUSR2, sighandler);
 
 	//start handling ships
 	int occupied_docks = 0;
@@ -87,7 +87,9 @@ int main (int argc, char * argv[]) {
 	int rear = -1;
 
 	while(1) {
-		msgrcv(msgq_porto, &message, (sizeof(long) + sizeof(char) * 100), 1, 0);
+		while(msgrcv(msgq_porto, &message, (sizeof(long) + sizeof(char) * 100), 1, 0) == -1) {
+			//loop until message is received
+		}
 		printf("MESSAGE RECEIVED BY PORT : %s\n", message.mesg_text);
 		strcpy(operation, strtok(message.mesg_text, ":"));
 		strcpy(ship_id, strtok(NULL, ":"));

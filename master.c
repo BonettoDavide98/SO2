@@ -11,6 +11,7 @@
 #include <signal.h>
 #include "merce.h"
 
+#define MAX_DAYS 30
 #define NAVE "nave.o"
 #define PORTO "porto.o"
 #define TIMER "timer.o"
@@ -38,25 +39,36 @@ int main (int argc, char ** argv) {
 		return(1);
 	}
 
+	struct report *reports = malloc((MAX_DAYS + 1) * sizeof(struct report));
+	for(int i = 0; i < MAX_DAYS + 1; i++) {
+		reports[i].seawithcargo = 0;
+		reports[i].seawithoutcargo = 0;
+		reports[i].docked = 0;
+		reports[i].ports = malloc(parameters.SO_PORTI * sizeof(struct portstatus));
+		for(int j = 0; j < parameters.SO_PORTI; j++) {
+			reports[i].ports[j].mercepresent = 0;
+			reports[i].ports[j].mercesent = 0;
+			reports[i].ports[j].mercereceived = 0;
+			reports[i].ports[j].banksocc = 0;
+			reports[i].ports[j].bankstot = 0;
+		}
+	}
+
+	int day = 0;
 	struct mesg_buffer message;
 	int sem_id, status;
 	pid_t child_pid, *kid_pids;
 	struct sembuf sops;
     char *args[13];
 	char *argss[11];
-	char *argst[5];
+	char *argst[6];
 	int *ports_shm_id_aval = malloc(parameters.SO_PORTI * sizeof(ports_shm_id_aval));
 	struct merce **ports_shm_ptr_aval = malloc(parameters.SO_PORTI * sizeof(ports_shm_ptr_aval));
 	int *ports_shm_id_req = malloc(parameters.SO_PORTI * sizeof(ports_shm_id_req));
 	int **ports_shm_ptr_req = malloc(parameters.SO_PORTI * sizeof(ports_shm_ptr_req));
 	struct position *ports_positions = malloc(parameters.SO_PORTI * sizeof(struct position));
-    char shm_id_str[3*sizeof(int)+1];
-    char shm_id_req_str[3*sizeof(int)+1];
-    char sem_id_str[3*sizeof(int)+1];
-    char msgq_id_str[3*sizeof(int)];
 
 	int master_msgq;
-	char master_msgq_str[3*sizeof(int)+1];
 
 	int *msgqueue_porto = malloc(parameters.SO_PORTI * sizeof(int));
 	int *msgqueue_nave = malloc(parameters.SO_NAVI * sizeof(int));
@@ -71,7 +83,7 @@ int main (int argc, char ** argv) {
 		argss[i] = malloc(20);
 	}
 
-	for(int i = 0; i < 5; i++) {
+	for(int i = 0; i < 6; i++) {
 		argst[i] = malloc(20);
 	}
 
@@ -247,7 +259,8 @@ int main (int argc, char ** argv) {
 	sprintf(argst[1], "%d", 30);
 	sprintf(argst[2], "%d", parameters.SO_NAVI);
 	sprintf(argst[3], "%d", parameters.SO_PORTI);
-	argst[4] = NULL;
+	sprintf(argst[4], "%d", master_msgq);
+	argst[5] = NULL;
 
 	switch(kid_pids[parameters.SO_PORTI + parameters.SO_NAVI] = fork()) {
 		case -1:
@@ -270,29 +283,55 @@ int main (int argc, char ** argv) {
 	int idfind;
 	char x[20];
 	char y[20];
+	char dayr[3];
+	char tempstr[20];
 
 	//handle messages
 	while(1) {
-		msgrcv(master_msgq, &message, (sizeof(long) + sizeof(char) * 100), 1, 0);
-
+		while(msgrcv(master_msgq, &message, (sizeof(long) + sizeof(char) * 100), 1, 0) == -1) {
+			//loop until message is receiveds
+		} 
 		switch(message.mesg_text[0]) {
 			case 's' :
-				printf("STATUS: %s\n", message.mesg_text);
+				//printf("--------- in s\n");
+				//printf("STATUS: %s\n", message.mesg_text);
+				strtok(message.mesg_text, ":");
+				strcpy(dayr, strtok(NULL, ":"));
+				strcpy(tempstr, strtok(NULL, ":"));
+				switch(atoi(tempstr)) {
+					case 0:
+						reports[atoi(dayr)].seawithcargo++;
+						break;
+					case 1:
+						reports[atoi(dayr)].seawithoutcargo++;
+						break;
+					case 2:
+						reports[atoi(dayr)].docked++;
+						break;
+					default:
+						break;
+				}
+				break;
+			case 'd':
+				//printf("--------- in d\n");
+				//printf("----------DAY PASSED----------\n");
+				for(int i = 0; i < parameters.SO_NAVI + parameters.SO_PORTI; i++) {
+					kill(kid_pids[i], SIGUSR2);
+				}
 				break;
 			default :
+				//printf("--------- in default\n");
 				strcpy(idin, strtok(message.mesg_text, ":"));
 				strcpy(posx_str, strtok(NULL, ":"));
 				strcpy(posy_str, strtok(NULL, ":"));
 				strcpy(merce, strtok(NULL, ":"));
 				printf("MASTER PARSED ID: %s, POSX: %s, POSY: %s, MERCE: %s\n", idin, posx_str, posy_str, merce);
-				kill(kid_pids[atoi(idin) + parameters.SO_PORTI], SIGUSR2);
 				idfind = getRequesting(posx_str, posy_str, ports_positions, ports_shm_ptr_req, atoi(merce), parameters.SO_PORTI, parameters.SO_MERCI);
 
 				message.mesg_type = 1;
 				sprintf(x, "%f", ports_positions[idfind].x);
 				sprintf(y, "%f", ports_positions[idfind].y);
-				sprintf(msgq_id_str, "%d", msgqueue_porto[idfind]);
-				strcpy(message.mesg_text, msgq_id_str);
+				sprintf(message.mesg_text, "%d", msgqueue_porto[idfind]);
 				strcat(message.mesg_text, ":");
 				strcat(message.mesg_text, x);
 				strcat(message.mesg_text, ":");

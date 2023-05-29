@@ -18,6 +18,7 @@ int hascargo = 0;	//no = 0 yes = 1
 
 int master_msgq;
 int shipid;
+int day = 0;
 
 void stormhandler();
 void reporthandler();
@@ -93,10 +94,13 @@ int main (int argc, char * argv[]) {
 			randomportflag = 0;
 			strcat(message.mesg_text, "0");
 		}
+		printf("SHIP %s ASKING MASTER %s\n", argv[2], message.mesg_text);
 		msgsnd(master_msgq, &message, (sizeof(long) + sizeof(char) * 100), 0);
 
 		//wait for master answer
-		msgrcv(atoi(argv[1]), &message, (sizeof(long) + sizeof(char) * 100), 1, 0);
+		while(msgrcv(atoi(argv[1]), &message, (sizeof(long) + sizeof(char) * 100), 1, 0) == -1) {
+			//loop until message is received
+		}
 		printf("SHIP %s RECEIVED : %s\n", argv[2], message.mesg_text);
 
 		//parse answer and go to specified location
@@ -130,7 +134,9 @@ int main (int argc, char * argv[]) {
 		msgsnd(atoi(msgq_id_porto), &message, (sizeof(long) + sizeof(char) * 100), 0);
 
 		//wait for port answer
-		msgrcv(atoi(argv[1]), &message, (sizeof(long) + sizeof(char) * 100), 1, 0);
+		while(msgrcv(atoi(argv[1]), &message, (sizeof(long) + sizeof(char) * 100), 1, 0) == -1) {
+			//loop until message is received
+		}
 		strcpy(text, strtok(message.mesg_text, ":"));
 		strcpy(shm_id_porto_req, strtok(NULL, ":"));
 		strcpy(shm_id_porto_aval, strtok(NULL, ":"));
@@ -238,7 +244,9 @@ int main (int argc, char * argv[]) {
 			strcat(message.mesg_text, argv[1]);
 			msgsnd(atoi(msgq_id_porto), &message, (sizeof(long) + sizeof(char) * 100), 0);
 			//aspetto risposta da porto prima ti ripartire
-			msgrcv(atoi(argv[1]), &message, (sizeof(long) + sizeof(char) * 100), 1, 0);
+			while(msgrcv(atoi(argv[1]), &message, (sizeof(long) + sizeof(char) * 100), 1, 0) == -1) {
+				//loop until message is received
+			}
 			currentplace = 0;
 			printf("RIPARTITA\n");
 
@@ -339,19 +347,21 @@ void reporthandler() {
 	message.mesg_type = 1;
 	char temp[20];
 
+	day++;
+
 	strcpy(message.mesg_text, "s");
 	strcat(message.mesg_text, ":");
-	sprintf(temp, "%d", shipid);
+	sprintf(temp, "%d", day);
 	strcat(message.mesg_text, temp);
 	strcat(message.mesg_text, ":");
 	if(currentplace == 0) {
 		if(hascargo == 1) {
-			strcat(message.mesg_text, "0");		//s:id:0	in sea with cargo
+			strcat(message.mesg_text, "0");		//s:day:0	in sea with cargo
 		} else {
-			strcat(message.mesg_text, "1");		//s:id:1	in sea without cargo
+			strcat(message.mesg_text, "1");		//s:day:1	in sea without cargo
 		}
 	} else {
-		strcat(message.mesg_text, "2");			//s:id:2	in port
+		strcat(message.mesg_text, "2");			//s:day:2	in port
 	}
 
 	msgsnd(master_msgq, &message, (sizeof(long) + sizeof(char) * 100), 0);

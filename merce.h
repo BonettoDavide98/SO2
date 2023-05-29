@@ -34,3 +34,18 @@ struct parameters {
     int SO_SWELL_DURATION;
     int SO_MAELSTORM;
 };
+
+struct report {
+    int seawithcargo;
+    int seawithoutcargo;
+    int docked;
+    struct portstatus * ports;
+};
+
+struct portstatus {
+    int mercepresent;
+    int mercesent;
+    int mercereceived;
+    int banksocc;
+    int bankstot;
+};
