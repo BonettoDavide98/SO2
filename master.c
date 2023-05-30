@@ -280,6 +280,7 @@ int main (int argc, char ** argv) {
 			break;
 	}
 
+	//start every child simultaneously
 	sleep(1);
 	sops.sem_num = 0;
 	sops.sem_flg = 0;
@@ -310,9 +311,7 @@ int main (int argc, char ** argv) {
 	int flag = 1;
 	int timeended = 0;
 	while(flag) {
-		while(msgrcv(master_msgq, &message, (sizeof(long) + sizeof(char) * 100), 1, 0) == -1) {
-			//loop until message is received
-		} 
+		msgrcv(master_msgq, &message, (sizeof(long) + sizeof(char) * 100), 1, 0);
 		printf("MASTER MESSAGE %s\n", message.mesg_text);
 		switch(message.mesg_text[0]) {
 			case 's':

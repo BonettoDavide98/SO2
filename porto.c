@@ -191,6 +191,8 @@ void reporthandler() {
 	char temp[20];
 	int tot = 0;
 
+	day++;
+
 	strcpy(message.mesg_text, "p");
 	strcat(message.mesg_text, ":");
 	sprintf(temp, "%d", port_id);		//port id
@@ -219,8 +221,6 @@ void reporthandler() {
 	strcat(message.mesg_text, temp);	//occupied docks
 
 	msgsnd(master_msgq, &message, (sizeof(long) + sizeof(char) * 100), 0);
-
-	day++;
 }
 
 void endreporthandler() {

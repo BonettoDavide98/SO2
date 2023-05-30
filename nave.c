@@ -400,6 +400,8 @@ void reporthandler() {
 	message.mesg_type = 1;
 	char temp[20];
 
+	day++;
+
 	strcpy(message.mesg_text, "s");
 	strcat(message.mesg_text, ":");
 	sprintf(temp, "%d", day);
@@ -416,8 +418,6 @@ void reporthandler() {
 	}
 
 	msgsnd(master_msgq, &message, (sizeof(long) + sizeof(char) * 100), 0);
-
-	day++;
 }
 
 void endreporthandler() {
