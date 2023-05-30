@@ -12,7 +12,7 @@
 #include <time.h>
 #include "merce.h"
 
-#define MAX_DAYS 30
+#define MAX_DAYS 5
 #define NAVE "nave.o"
 #define PORTO "porto.o"
 #define TIMER "timer.o"
@@ -218,7 +218,7 @@ int main (int argc, char ** argv) {
 		sprintf(args[8], "%d", ports_shm_id_req[i]);
 		sprintf(args[9], "%d", parameters.SO_FILL);
 		sprintf(args[10], "%d", parameters.SO_LOADSPEED);
-		sprintf(args[11], "%d", (parameters.SO_MERCI + 1));
+		sprintf(args[11], "%d", parameters.SO_MERCI);
 		sprintf(args[12], "%d", master_msgq);
     	args[13] = NULL;
 
@@ -244,7 +244,7 @@ int main (int argc, char ** argv) {
 		sprintf(argss[6], "%d", master_msgq);
 		sprintf(argss[7], "%d", parameters.SO_CAPACITY);
 		sprintf(argss[8], "%d", parameters.SO_STORM_DURATION);
-		sprintf(argss[9], "%d", (parameters.SO_MERCI + 1));
+		sprintf(argss[9], "%d", parameters.SO_MERCI);
 		sprintf(argss[10], "%d", sem_id);
 		argss[11] = NULL;
 
@@ -308,41 +308,47 @@ int main (int argc, char ** argv) {
 
 	//handle messages
 	int flag = 1;
+	int timeended = 0;
 	while(flag) {
 		while(msgrcv(master_msgq, &message, (sizeof(long) + sizeof(char) * 100), 1, 0) == -1) {
-			//loop until message is receiveds
+			//loop until message is received
 		} 
+		printf("MASTER MESSAGE %s\n", message.mesg_text);
 		switch(message.mesg_text[0]) {
 			case 's':
-				strtok(message.mesg_text, ":");
-				strcpy(dayr, strtok(NULL, ":"));
-				strcpy(tempstr, strtok(NULL, ":"));
-				switch(atoi(tempstr)) {
-					case 0:
-						reports[atoi(dayr)].seawithcargo++;
-						break;
-					case 1:
-						reports[atoi(dayr)].seawithoutcargo++;
-						break;
-					case 2:
-						reports[atoi(dayr)].docked++;
-						break;
-					default:
-						break;
+				if(timeended == 0) {
+					strtok(message.mesg_text, ":");
+					strcpy(dayr, strtok(NULL, ":"));
+					strcpy(tempstr, strtok(NULL, ":"));
+					switch(atoi(tempstr)) {
+						case 0:
+							reports[atoi(dayr)].seawithcargo++;
+							break;
+						case 1:
+							reports[atoi(dayr)].seawithoutcargo++;
+							break;
+						case 2:
+							reports[atoi(dayr)].docked++;
+							break;
+						default:
+							break;
+					}
 				}
 				break;
 			case 'p':
-				strtok(message.mesg_text, ":");
-				strcpy(portid, strtok(NULL, ":"));
-				strcpy(dayr, strtok(NULL, ":"));
-				strcpy(tempstr, strtok(NULL, ":"));
-				reports[atoi(dayr)].ports[atoi(portid)].mercesent = atoi(tempstr);
-				strcpy(tempstr, strtok(NULL, ":"));
-				reports[atoi(dayr)].ports[atoi(portid)].mercereceived = atoi(tempstr);
-				strcpy(tempstr, strtok(NULL, ":"));
-				reports[atoi(dayr)].ports[atoi(portid)].dockstot = atoi(tempstr);
-				strcpy(tempstr, strtok(NULL, ":"));
-				reports[atoi(dayr)].ports[atoi(portid)].docksocc = atoi(tempstr);
+				if(timeended == 0) {
+					strtok(message.mesg_text, ":");
+					strcpy(portid, strtok(NULL, ":"));
+					strcpy(dayr, strtok(NULL, ":"));
+					strcpy(tempstr, strtok(NULL, ":"));
+					reports[atoi(dayr)].ports[atoi(portid)].mercesent = atoi(tempstr);
+					strcpy(tempstr, strtok(NULL, ":"));
+					reports[atoi(dayr)].ports[atoi(portid)].mercereceived = atoi(tempstr);
+					strcpy(tempstr, strtok(NULL, ":"));
+					reports[atoi(dayr)].ports[atoi(portid)].dockstot = atoi(tempstr);
+					strcpy(tempstr, strtok(NULL, ":"));
+					reports[atoi(dayr)].ports[atoi(portid)].docksocc = atoi(tempstr);
+				}
 				break;
 			case 'd':
 				for(int i = 0; i < parameters.SO_NAVI + parameters.SO_PORTI; i++) {
@@ -350,36 +356,39 @@ int main (int argc, char ** argv) {
 				}
 
 				//add merci at random
-				int *temparray = malloc((parameters.SO_MERCI + 1) * sizeof(int));
-				for(int j = 0; j < parameters.SO_MERCI + 1; j++) {
-					temparray[j] = 0;
-				}
+				/*if(day < MAX_DAYS - 1) {
+					int *temparray = malloc((parameters.SO_MERCI + 1) * sizeof(int));
+					for(int j = 0; j < parameters.SO_MERCI + 1; j++) {
+						temparray[j] = 0;
+					}
 
-				tot = 0;
-				
-				while(tot + parameters.SO_SIZE <= parameters.SO_FILL/parameters.SO_DAYS) {
-					temp = 1 + (rand() % parameters.SO_SIZE);
-					temparray[1 + (rand() % parameters.SO_MERCI)] += temp;
-					tot += temp;
-				}
+					tot = 0;
+					
+					while(tot + parameters.SO_SIZE <= parameters.SO_FILL/parameters.SO_DAYS) {
+						temp = 1 + (rand() % parameters.SO_SIZE);
+						temparray[1 + (rand() % parameters.SO_MERCI)] += temp;
+						tot += temp;
+					}
 
-				for(int j = 1; j <= parameters.SO_MERCI; j++) {
-					a = rand() % parameters.SO_PORTI;
-					int c = a;
-					do {
-						c++;
-						if(c >= parameters.SO_PORTI) {
-							c = 0;
-						}
+					for(int j = 1; j <= parameters.SO_MERCI; j++) {
+						a = rand() % parameters.SO_PORTI;
+						int c = a;
+						do {
+							c++;
+							if(c >= parameters.SO_PORTI) {
+								c = 0;
+							}
 
-						if(ports_shm_ptr_req[c][j] <= 0) {
-							totalgenerated[j] += temparray[j];
-							addMerceToPort(temparray[j], j, parameters.SO_MAX_VITA, parameters.SO_MIN_VITA, ports_shm_ptr_aval[c], day * parameters.SO_MERCI);
-							break;
-						}
-					} while(c != a);
-				}
-				free(temparray);
+							if(ports_shm_ptr_req[c][j] <= 0) {
+								printf("RANDOMLY ADDING %d TONS OF %d TO PORT %d\n", temparray[j], j, c);
+								totalgenerated[j] += temparray[j];
+								addMerceToPort(temparray[j], j, parameters.SO_MAX_VITA, parameters.SO_MIN_VITA, ports_shm_ptr_aval[c], day * parameters.SO_MERCI);
+								break;
+							}
+						} while(c != a);
+					}
+					free(temparray);
+				}*/
 				
 				//count total avaiable merci
 				for(int i = 0; i < parameters.SO_PORTI; i++) {
@@ -408,87 +417,96 @@ int main (int argc, char ** argv) {
 					printf("RECEIVED %d TONS OF MERCE | ", reports[day].ports[i].mercereceived);
 					printf("%d/%d OCCUPIED DOCKS\n", reports[day].ports[i].docksocc, reports[day].ports[i].dockstot);
 				}
-				
+				printf("-----------------------------------\n");
 				day++;
 				break;
 			case 't':
-				for(int i = 0; i < parameters.SO_NAVI + parameters.SO_PORTI; i++) {
+				for(int i = 0; i < parameters.SO_NAVI + parameters.SO_PORTI + 1; i++) {
 					kill(kid_pids[i], SIGINT);
 				}
-
-				while(num_kid_pids_navi > 0 || num_kid_pids_porti > 0) {
-					msgrcv(master_msgq, &message, (sizeof(long) + sizeof(char) * 100), 1, 0);
-
-					switch (message.mesg_text[0]) {
-						case 'S':
-							strtok(message.mesg_text, ":");
-							for(int i = 1; i < parameters.SO_MERCI + 1; i++) {
-								spoilednave[i] += atoi(tempstr);
-							}
-							num_kid_pids_navi--;
-							break;
-						case 'P':
-							strtok(message.mesg_text, ":");
-							for(int i = 1; i < parameters.SO_MERCI + 1; i++) {
-								strcpy(tempstr, strtok(NULL, ":"));
-								spoiledporto[i] += atoi(tempstr);
-							}
-							num_kid_pids_porti--;
-							break;
-						default:
-							break;
-					}
+				timeended = 1;
+				break;
+			case 'P':
+				strtok(message.mesg_text, ":");
+				for(int i = 1; i < parameters.SO_MERCI + 1; i++) {
+					strcpy(tempstr, strtok(NULL, ":"));
+					spoiledporto[i] += atoi(tempstr);
 				}
-
-				int * totalsent = malloc((1 + parameters.SO_MERCI) * sizeof(int));
-				int * totaldelivered = malloc((1 + parameters.SO_MERCI) * sizeof(int));
-				int * totalport = malloc((1 + parameters.SO_MERCI) * sizeof(int));
-				for(int i = 0; i < parameters.SO_MERCI + 1; i++) {
-					totalsent[i] = 0;
-					totaldelivered[i] = 0;
-					totalport[i] = 0;
-				}
-
-				printf("-----------------------------------\n");
-				for(int i = 0; i < parameters.SO_PORTI; i++) {
-					for(int j = 0; j < day * parameters.SO_MERCI; j++) {
-						if(ports_shm_ptr_aval[i][j].type > 0 && ports_shm_ptr_aval[i][j].qty > 0) {
-							totalport[ports_shm_ptr_aval[i][j].type] += ports_shm_ptr_aval[i][j].qty;
-						}
-					}
-				}
-
-				flag = 0;
+				num_kid_pids_porti--;
 				break;
 			case 'S' :
 				strtok(message.mesg_text, ":");
-				for(int i = 1; strcpy(tempstr, strtok(NULL, ":")) != NULL; i++) {
+				for(int i = 1; i < parameters.SO_MERCI + 1; i++) {
+					strcpy(tempstr, strtok(NULL, ":"));
 					spoilednave[i] += atoi(tempstr);
 				}
 				num_kid_pids_navi--;
 				break;
 			default :
-				strcpy(idin, strtok(message.mesg_text, ":"));
-				strcpy(posx_str, strtok(NULL, ":"));
-				strcpy(posy_str, strtok(NULL, ":"));
-				strcpy(merce, strtok(NULL, ":"));
-				printf("MASTER PARSED ID: %s, POSX: %s, POSY: %s, MERCE: %s\n", idin, posx_str, posy_str, merce);
-				idfind = getRequesting(posx_str, posy_str, ports_positions, ports_shm_ptr_req, atoi(merce), parameters.SO_PORTI, parameters.SO_MERCI);
+				if(timeended == 0) {
+					strcpy(idin, strtok(message.mesg_text, ":"));
+					strcpy(posx_str, strtok(NULL, ":"));
+					strcpy(posy_str, strtok(NULL, ":"));
+					strcpy(merce, strtok(NULL, ":"));
+					printf("MASTER PARSED ID: %s, POSX: %s, POSY: %s, MERCE: %s\n", idin, posx_str, posy_str, merce);
+					idfind = getRequesting(posx_str, posy_str, ports_positions, ports_shm_ptr_req, atoi(merce), parameters.SO_PORTI, parameters.SO_MERCI);
 
-				message.mesg_type = 1;
-				sprintf(x, "%f", ports_positions[idfind].x);
-				sprintf(y, "%f", ports_positions[idfind].y);
-				sprintf(message.mesg_text, "%d", msgqueue_porto[idfind]);
-				strcat(message.mesg_text, ":");
-				strcat(message.mesg_text, x);
-				strcat(message.mesg_text, ":");
-				strcat(message.mesg_text, y);
-				msgsnd(msgqueue_nave[atoi(idin)], &message, (sizeof(long) + sizeof(char) * 100), 0);
+					message.mesg_type = 1;
+					sprintf(x, "%f", ports_positions[idfind].x);
+					sprintf(y, "%f", ports_positions[idfind].y);
+					sprintf(message.mesg_text, "%d", msgqueue_porto[idfind]);
+					strcat(message.mesg_text, ":");
+					strcat(message.mesg_text, x);
+					strcat(message.mesg_text, ":");
+					strcat(message.mesg_text, y);
+					msgsnd(msgqueue_nave[atoi(idin)], &message, (sizeof(long) + sizeof(char) * 100), 0);
+				}
 				break;
+		}
+
+		if(num_kid_pids_navi <= 0 && num_kid_pids_porti <= 0) {
+			flag = 0;
 		}
 	}
 
 	printf("OUT OF WHILE LOOP\n");
+	int * totalsent = malloc((1 + parameters.SO_MERCI) * sizeof(int));
+	int * totaldelivered = malloc((1 + parameters.SO_MERCI) * sizeof(int));
+	int * totalport = malloc((1 + parameters.SO_MERCI) * sizeof(int));
+	for(int i = 0; i < parameters.SO_MERCI + 1; i++) {
+		totalsent[i] = 0;
+		totaldelivered[i] = 0;
+		totalport[i] = 0;
+	}
+
+	for(int i = 0; i < parameters.SO_PORTI; i++) {
+		//add merce still in port
+		for(int j = 0; j < day * parameters.SO_MERCI; j++) {
+			if(ports_shm_ptr_aval[i][j].type > 0 && ports_shm_ptr_aval[i][j].qty > 0) {
+				totalport[ports_shm_ptr_aval[i][j].type] += ports_shm_ptr_aval[i][j].qty;
+			}
+		}
+
+		//add merce received
+		for(int j = 1; j <= parameters.SO_MERCI; j++) {
+			if(ports_shm_ptr_req[i][j + parameters.SO_MERCI] > 0) {
+				totaldelivered[j] += ports_shm_ptr_req[i][j + parameters.SO_MERCI];
+			}
+		}
+
+		//add merce sent
+		for(int j = 1; j <= parameters.SO_MERCI; j++) {
+			if(ports_shm_ptr_req[i][j + (parameters.SO_MERCI * 2)] > 0) {
+				totalsent[j] += ports_shm_ptr_req[i][j + (parameters.SO_MERCI * 2)];
+			}
+		}
+	}
+
+	//print merci report
+	printf("-----------------------------------\n");
+	for(int i = 1; i < parameters.SO_MERCI + 1; i++) {
+		printf("MERCE %d:\n| GENERATED %d | AVAILABLE %d | SENT %d | DELIVERED %d |\n| SPOILED IN PORT %d | SPOILED IN SHIP %d |\n", i, totalgenerated[i], totalport[i], totalsent[i], totaldelivered[i], spoiledporto[i], spoilednave[i]);
+	}
 
 	//close messagequeues
 	for(int i = 0; i < parameters.SO_PORTI; i++) {
@@ -549,6 +567,7 @@ void addMerceToPort(int qty, int type, int max_vita, int min_vita, struct merce 
 			port[i].type = type;
 			gettimeofday(&port[i].spoildate, NULL);
 			port[i].spoildate.tv_sec += rand() % (max_vita - min_vita);
+			i = limit;
 		}
 	}
 }

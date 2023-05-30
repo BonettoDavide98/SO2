@@ -92,7 +92,7 @@ int main (int argc, char * argv[]) {
 		while(msgrcv(msgq_porto, &message, (sizeof(long) + sizeof(char) * 100), 1, 0) == -1) {
 			//loop until message is received
 		}
-		printf("MESSAGE RECEIVED BY PORT : %s\n", message.mesg_text);
+		//printf("MESSAGE RECEIVED BY PORT : %s\n", message.mesg_text);
 		strcpy(operation, strtok(message.mesg_text, ":"));
 		strcpy(ship_id, strtok(NULL, ":"));
 
@@ -151,9 +151,10 @@ int main (int argc, char * argv[]) {
 		printf("\n");
 
 		printf("PORT REQUESTS: |");
-		for(int j = 1; j < num_merci + 1; j++) {
-			if(shm_ptr_req[j] > 0) {
-				printf(" %d TONS OF %d |", shm_ptr_req[j], j);
+		for(int j = 1; j < num_merci * 3 + 1; j++) {
+			printf(" %d TONS OF %d |", shm_ptr_req[j], j);
+			if(j % num_merci == 0) {
+				printf("\n");
 			}
 		}
 		printf("\n");
@@ -190,8 +191,6 @@ void reporthandler() {
 	char temp[20];
 	int tot = 0;
 
-	day++;
-
 	strcpy(message.mesg_text, "p");
 	strcat(message.mesg_text, ":");
 	sprintf(temp, "%d", port_id);		//port id
@@ -220,16 +219,16 @@ void reporthandler() {
 	strcat(message.mesg_text, temp);	//occupied docks
 
 	msgsnd(master_msgq, &message, (sizeof(long) + sizeof(char) * 100), 0);
+
+	day++;
 }
 
 void endreporthandler() {
-	printf("TERMINATING PORTO...\n");
+	//printf("TERMINATING PORTO...\n");
 	removeSpoiled(shm_ptr_aval, num_merci * day);
 	struct mesg_buffer message;
 	message.mesg_type = 1;
 	char temp[20];
-
-	day++;
 
 	strcpy(message.mesg_text, "P");
 	for(int i = 1; i < num_merci + 1; i++) {
@@ -238,6 +237,7 @@ void endreporthandler() {
 		strcat(message.mesg_text, temp);
 	}
 
-	printf("MESSAGE FROM PORTO: %s\n", message.mesg_text);
 	msgsnd(master_msgq, &message, (sizeof(long) + sizeof(char) * 100), 0);
+
+	exit(0);
 }
