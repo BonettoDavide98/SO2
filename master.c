@@ -61,8 +61,8 @@ int main (int argc, char ** argv) {
 	pid_t child_pid, *kid_pids;
 	struct sembuf sops;
     char *args[14];
-	char *argss[11];
-	char *argst[6];
+	char *argss[12];
+	char *argst[7];
 	int *ports_shm_id_aval = malloc(parameters.SO_PORTI * sizeof(ports_shm_id_aval));
 	struct merce **ports_shm_ptr_aval = malloc(parameters.SO_PORTI * sizeof(ports_shm_ptr_aval));
 	int *ports_shm_id_req = malloc(parameters.SO_PORTI * sizeof(ports_shm_id_req));
@@ -80,19 +80,16 @@ int main (int argc, char ** argv) {
 		args[i] = malloc(20);
 	}
 
-	for(int i = 0; i < 11; i++) {
+	for(int i = 0; i < 12; i++) {
 		argss[i] = malloc(20);
 	}
 
-	for(int i = 0; i < 6; i++) {
+	for(int i = 0; i < 7; i++) {
 		argst[i] = malloc(20);
 	}
 
 	sem_id = semget(IPC_PRIVATE, 1, 0600);
 	semctl(sem_id, 0, SETVAL, 0);
-
-	sops.sem_num = 0;
-	sops.sem_flg = 0;
 
 	kid_pids = malloc((parameters.SO_PORTI + parameters.SO_NAVI) * sizeof(*kid_pids));
 
@@ -229,7 +226,7 @@ int main (int argc, char ** argv) {
 				break;
 		}
 	}
-
+	
 	//start ship processes
 	for(int j = 0; j < parameters.SO_NAVI; j++) {
 		strcpy(argss[0], NAVE);
@@ -242,7 +239,8 @@ int main (int argc, char ** argv) {
 		sprintf(argss[7], "%d", parameters.SO_CAPACITY);
 		sprintf(argss[8], "%d", parameters.SO_STORM_DURATION);
 		sprintf(argss[9], "%d", (parameters.SO_MERCI + 1));
-		argss[10] = NULL;
+		sprintf(argss[10], "%d", sem_id);
+		argss[11] = NULL;
 
 		//printf("TEST: %s %s\n", x, y);
 		
@@ -263,7 +261,8 @@ int main (int argc, char ** argv) {
 	sprintf(argst[2], "%d", parameters.SO_NAVI);
 	sprintf(argst[3], "%d", parameters.SO_PORTI);
 	sprintf(argst[4], "%d", master_msgq);
-	argst[5] = NULL;
+	sprintf(argst[5], "%d", sem_id);
+	argst[6] = NULL;
 
 	switch(kid_pids[parameters.SO_PORTI + parameters.SO_NAVI] = fork()) {
 		case -1:
@@ -275,8 +274,11 @@ int main (int argc, char ** argv) {
 			break;
 	}
 
-	sops.sem_op = 1;
-	//semop(sem_id, &sops, SIGUSR1);
+	sleep(1);
+	sops.sem_num = 0;
+	sops.sem_flg = 0;
+	sops.sem_op = parameters.SO_PORTI + parameters.SO_NAVI + 2;
+	semop(sem_id, &sops, 1);
 
 	char idin[10];
 	char posx_str[20];
@@ -289,16 +291,18 @@ int main (int argc, char ** argv) {
 	char dayr[3];
 	char tempstr[20];
 	char portid[20];
+	int * spoilednave = malloc((1 + parameters.SO_NAVI));
+	int * spoiledporto = malloc((1 + parameters.SO_PORTI));
+	int num_kid_pids = parameters.SO_PORTI + parameters.SO_NAVI + 1;
 
 	//handle messages
-	while(1) {
+	int flag = 1;
+	while(flag) {
 		while(msgrcv(master_msgq, &message, (sizeof(long) + sizeof(char) * 100), 1, 0) == -1) {
 			//loop until message is receiveds
 		} 
 		switch(message.mesg_text[0]) {
 			case 's':
-				//printf("--------- in s\n");
-				//printf("STATUS: %s\n", message.mesg_text);
 				strtok(message.mesg_text, ":");
 				strcpy(dayr, strtok(NULL, ":"));
 				strcpy(tempstr, strtok(NULL, ":"));
@@ -330,8 +334,6 @@ int main (int argc, char ** argv) {
 				reports[atoi(dayr)].ports[atoi(portid)].docksocc = atoi(tempstr);
 				break;
 			case 'd':
-				//printf("--------- in d\n");
-				//printf("----------DAY PASSED----------\n");
 				for(int i = 0; i < parameters.SO_NAVI + parameters.SO_PORTI; i++) {
 					kill(kid_pids[i], SIGUSR2);
 				}
@@ -393,8 +395,62 @@ int main (int argc, char ** argv) {
 				
 				day++;
 				break;
+			case 't':
+				for(int i = 0; i < parameters.SO_NAVI + parameters.SO_PORTI; i++) {
+					kill(kid_pids[i], SIGINT);
+				}
+				
+				//count total avaiable merci
+				for(int i = 0; i < parameters.SO_PORTI; i++) {
+					for(int j = 0; j < parameters.SO_MERCI * (day + 1); j++) {
+						if(ports_shm_ptr_aval[i][j].type == 0) {
+							j = parameters.SO_MERCI * (day + 1);
+						} else if(ports_shm_ptr_aval[i][j].type > 0 && ports_shm_ptr_aval[i][j].qty > 0) {
+							reports[day].ports[i].mercepresent += ports_shm_ptr_aval[i][j].qty;
+						}
+					}
+				}
+
+				//print report
+				printf("-----------------------------------\n");
+				printf("FINAL REPORT\n");
+				printf("SHIP BY SEA WITHOUT CARGO: %d\n", reports[day].seawithoutcargo);
+				printf("SHIP BY SEA WITH CARGO: %d\n", reports[day].seawithcargo);
+				printf("SHIP DOCKED: %d\n", reports[day].docked);
+				for(int i = 0; i < parameters.SO_PORTI; i++) {
+					printf("PORT %d: %d TONS OF MERCE AVAILABLE | ", i, reports[day].ports[i].mercepresent);
+					printf("SENT %d TONS OF MERCE | ", reports[day].ports[i].mercesent);
+					printf("RECEIVED %d TONS OF MERCE | ", reports[day].ports[i].mercereceived);
+					printf("%d/%d OCCUPIED DOCKS\n", reports[day].ports[i].docksocc, reports[day].ports[i].dockstot);
+				}
+
+				for(int i = 0; i < num_kid_pids; i++) {
+					msgrcv(master_msgq, &message, (sizeof(long) + sizeof(char) * 100), 1, 0);
+					while(strcmp(message.mesg_text[0], "S") != 0 && strcmp(message.mesg_text[0], "P") != 0) {
+						msgrcv(master_msgq, &message, (sizeof(long) + sizeof(char) * 100), 1, 0);
+					}
+					switch (message.mesg_text[0]) {
+						case 'S':
+						//have ship send whats in cargo and whats spoiled
+							break;
+						case 'P':
+						//have port send whats spoiled
+							break;
+						default:
+							break;
+					}
+				}
+				flag = 0;
+				break;
+			case 'S' :
+				strtok(message.mesg_text, ":");
+				while(strtok(message.mesg_text, ":") != -1) {
+					
+				}
+				break;
+			case 'P':
+				break;
 			default :
-				//printf("--------- in default\n");
 				strcpy(idin, strtok(message.mesg_text, ":"));
 				strcpy(posx_str, strtok(NULL, ":"));
 				strcpy(posy_str, strtok(NULL, ":"));

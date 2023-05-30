@@ -8,6 +8,7 @@
 #include <math.h>
 #include <time.h>
 #include <signal.h>
+#include <signal.h>
 #include "merce.h"
 
 int stormduration;
@@ -19,9 +20,13 @@ int hascargo = 0;	//no = 0 yes = 1
 int master_msgq;
 int shipid;
 int day = 0;
+struct merce * cargo;
+int * spoiled;
+int num_merci;
 
 void stormhandler();
 void reporthandler();
+void endreporthandler();
 void sleepForStorm();
 
 int main (int argc, char * argv[]) {
@@ -36,8 +41,11 @@ int main (int argc, char * argv[]) {
 	strcpy(posy_str, argv[4]);
 	sscanf(argv[3], "%lf", &pos.x);
 	sscanf(argv[4], "%lf", &pos.y);
-	int num_merci = atoi(argv[9]);
+	num_merci = atoi(argv[9]);
 	int max_slots = num_merci * 5;
+	struct sembuf sops;
+	int master_sem_id = atoi(argv[10]);
+	spoiled = malloc((1 + num_merci) * sizeof(int));
 
 	stormduration = atoi(argv[8]);
 	char string_out[100];
@@ -58,7 +66,7 @@ int main (int argc, char * argv[]) {
 	int tonstomove = 0;
 	long sleeptime;
 
-	struct merce *cargo = malloc(max_slots * sizeof(struct merce));
+	cargo = malloc(max_slots * sizeof(struct merce));
 	int cargocapacity = atoi(argv[7]);
 	int cargocapacity_free = cargocapacity;
 
@@ -73,11 +81,17 @@ int main (int argc, char * argv[]) {
 
 	signal(SIGUSR1, stormhandler);
 	signal(SIGUSR2, reporthandler);
+	signal(SIGINT, enderporthandler);
+
+	//wait for semaphore
+	sops.sem_num = 0;
+	sops.sem_flg = 0;
+	sops.sem_op = -1;
+	semop(master_sem_id, &sops, 1);
 
 	//ship loop, will last until interrupted by an external process
 	while(1) {
 		//ask master the closest port that asks for my largest merce
-		sleep(1);
 		removeSpoiled(cargo, shipid);
 		strcpy(message.mesg_text, argv[2]);
 		strcat(message.mesg_text, ":");
@@ -270,11 +284,13 @@ void removeSpoiled(struct merce *available, int naveid) {
 		if(available[i].type > 0 && available[i].qty > 0) {
 			if(available[i].spoildate.tv_sec < currenttime.tv_sec) {
 				printf("REMOVED %d TONS OF %d FROM SHIP %d DUE TO SPOILAGE\n", available[i].qty, available[i].type, naveid);
+				spoiled[available[i].type] += available[i].qty;
 				available[i].type = 0;
 				available[i].qty = 0;
 			} else if(available[i].spoildate.tv_sec == currenttime.tv_sec) {
 				if(available[i].spoildate.tv_usec <= currenttime.tv_usec) {
-				printf("REMOVED %d TONS OF %d FROM SHIP %d DUE TO SPOILAGE\n", available[i].qty, available[i].type, naveid);
+					printf("REMOVED %d TONS OF %d FROM SHIP %d DUE TO SPOILAGE\n", available[i].qty, available[i].type, naveid);
+					spoiled[available[i].type] += available[i].qty;
 					available[i].type = 0;
 					available[i].qty = 0;
 				}
@@ -393,6 +409,23 @@ void reporthandler() {
 		}
 	} else {
 		strcat(message.mesg_text, "2");			//s:day:2	in port
+	}
+
+	msgsnd(master_msgq, &message, (sizeof(long) + sizeof(char) * 100), 0);
+}
+
+void endreporthandler() {
+	struct mesg_buffer message;
+	message.mesg_type = 1;
+	char temp[20];
+
+	day++;
+
+	strcpy(message.mesg_text, "S");
+	for(int i = 1; i < num_merci + 1; i++) {
+		strcat(message.mesg_text, ":");
+		sprintf(temp, "%d", spoiled[i]);
+		strcat(message.mesg_text, temp);
 	}
 
 	msgsnd(master_msgq, &message, (sizeof(long) + sizeof(char) * 100), 0);

@@ -17,6 +17,7 @@ int *shm_ptr_req;
 int day = 0;
 int docks;
 int occupied_docks;
+int * spoiled;
 
 void reporthandler();
 
@@ -31,7 +32,7 @@ int main (int argc, char * argv[]) {
 	port_id = atoi(argv[4]);
 	docks = atoi(argv[7]);
 	int shm_id_aval, shm_id_req;
-	int sem_id = atoi(argv[2]);
+	int master_sem_id = atoi(argv[2]);
 	int msgq_porto = atoi(argv[3]);
 	int fill = atoi(argv[9]);
 	int loadtime = atoi(argv[10]);
@@ -39,6 +40,7 @@ int main (int argc, char * argv[]) {
 	num_merci = atoi(argv[11]);
 	master_msgq = atoi(argv[12]);
 	key_t mem_key;
+	spoiled = malloc((1 +num_merci) * sizeof(int));
 	struct sembuf sops;
 	struct merce *available;
 	struct merce *requested;
@@ -62,20 +64,10 @@ int main (int argc, char * argv[]) {
 		exit(1);
 	}
 
-	//printf("POSIZIONE PORTO %d = %s %s\n", atoi(argv[4]), argv[5], argv[6]);
-
-	/*for(int i = 0; i < 3; i++) {
-		sops.sem_op = -1;
-		semop(sem_id, &sops, 1);
-
-        //printf("PORTO %d HAS: %d OF %d\n", atoi(argv[4]), shm_ptr_aval[i].qty, i);
-        //printf("PORTO %d REQUESTS: %d OF %d\n", atoi(argv[4]), shm_ptr_req[i].qty, i);
-
-		sleep(0);
-
-		sops.sem_op = 1;
-		semop(sem_id, &sops, 1);
-	}*/
+	sops.sem_num = 0;
+	sops.sem_flg = 0;
+	sops.sem_op = -1;
+	semop(master_sem_id, &sops, 1);
 
 	signal(SIGUSR2, reporthandler);
 
@@ -114,7 +106,7 @@ int main (int argc, char * argv[]) {
 			printf("PORT %s HAS FINISHED SERVING A SHIP\n", argv[4]);
 			strcpy(message.mesg_text, "freetogo");
 			msgsnd(atoi(ship_id), &message, (sizeof(long) + sizeof(char) * 100), 0);
-			removeSpoiled(shm_ptr_aval, port_id, shm_ptr_req[0]);
+			removeSpoiled(shm_ptr_aval, shm_ptr_req[0]);
 			occupied_docks -= 1;
 		}
 
@@ -131,7 +123,7 @@ int main (int argc, char * argv[]) {
 			strcat(message.mesg_text, ":");
 			sprintf(text, "%d", loadtime);
 			strcat(message.mesg_text, text);
-			removeSpoiled(shm_ptr_aval, port_id, shm_ptr_req[0]);
+			removeSpoiled(shm_ptr_aval, shm_ptr_req[0]);
 			msgsnd(queue[front], &message, (sizeof(long) + sizeof(char) * 100), 0);
 			front++;
 			if(front > rear) {
@@ -162,18 +154,20 @@ int main (int argc, char * argv[]) {
 	exit(0);
 }
 
-void removeSpoiled(struct merce *available, int portid, int limit) {
+void removeSpoiled(struct merce *available, int limit) {
 	struct timeval currenttime;
 	gettimeofday(&currenttime, NULL);
 	for(int i = 0; i < limit; i++) {
 		if(available[i].type > 0 && available[i].qty > 0) {
 			if(available[i].spoildate.tv_sec < currenttime.tv_sec) {
-				printf("REMOVED %d TONS OF %d FROM PORT %d DUE TO SPOILAGE\n", available[i].qty, available[i].type, portid);
+				printf("REMOVED %d TONS OF %d FROM PORT DUE TO SPOILAGE\n", available[i].qty, available[i].type);
+				spoiled[available[i].type] += available[i].qty;
 				available[i].type = -1;
 				available[i].qty = 0;
 			} else if(available[i].spoildate.tv_sec == currenttime.tv_sec) {
 				if(available[i].spoildate.tv_usec <= currenttime.tv_usec) {
-					printf("REMOVED %d TONS OF %d FROM PORT %d DUE TO SPOILAGE\n", available[i].qty, available[i].type, portid);
+					printf("REMOVED %d TONS OF %d FROM PORT DUE TO SPOILAGE\n", available[i].qty, available[i].type);
+					spoiled[available[i].type] += available[i].qty;
 					available[i].type = -1;
 					available[i].qty = 0;
 				}
