@@ -355,7 +355,7 @@ int main (int argc, char ** argv) {
 				}
 
 				//add merci at random
-				/*if(day < MAX_DAYS - 1) {
+				if(day < MAX_DAYS - 1) {
 					int *temparray = malloc((parameters.SO_MERCI + 1) * sizeof(int));
 					for(int j = 0; j < parameters.SO_MERCI + 1; j++) {
 						temparray[j] = 0;
@@ -379,15 +379,13 @@ int main (int argc, char ** argv) {
 							}
 
 							if(ports_shm_ptr_req[c][j] <= 0) {
-								printf("RANDOMLY ADDING %d TONS OF %d TO PORT %d\n", temparray[j], j, c);
-								totalgenerated[j] += temparray[j];
-								addMerceToPort(temparray[j], j, parameters.SO_MAX_VITA, parameters.SO_MIN_VITA, ports_shm_ptr_aval[c], day * parameters.SO_MERCI);
+								addMerceToPort(temparray[j], j, parameters.SO_MAX_VITA, parameters.SO_MIN_VITA, ports_shm_ptr_aval[c], day * parameters.SO_MERCI, totalgenerated);
 								break;
 							}
 						} while(c != a);
 					}
 					free(temparray);
-				}*/
+				}
 				
 				//count total avaiable merci
 				for(int i = 0; i < parameters.SO_PORTI; i++) {
@@ -559,13 +557,14 @@ int getRequesting(char *posx_s, char *posy_s, struct position * portpositions, i
 	return rand() % nporti;
 }
 
-void addMerceToPort(int qty, int type, int max_vita, int min_vita, struct merce * port, int limit) {
+void addMerceToPort(int qty, int type, int max_vita, int min_vita, struct merce * port, int limit, int * totalgenerated) {
 	for(int i = 0; i < limit; i++) {
 		if(port[i].type <= 0) {
 			port[i].qty = qty;
 			port[i].type = type;
 			gettimeofday(&port[i].spoildate, NULL);
 			port[i].spoildate.tv_sec += rand() % (max_vita - min_vita);
+			totalgenerated[type] += qty;
 			i = limit;
 		}
 	}
