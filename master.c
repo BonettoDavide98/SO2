@@ -111,6 +111,11 @@ int main (int argc, char ** argv) {
 	ports_positions[3].y = parameters.SO_LATO;
 
 	int a,b,tot,temp;
+	int * totalgenerated = malloc((1 + parameters.SO_MERCI) * sizeof(int));
+	for(int i = 0; i < parameters.SO_MERCI + 1; i++) {
+		totalgenerated[i] = 0;
+	}
+
 	//create ports
 	for(int i = 0; i < parameters.SO_PORTI; i++) {
 		if((int) (ports_shm_id_aval[i]  = shmget(IPC_PRIVATE, sizeof(int), 0600)) < 0) {
@@ -175,6 +180,7 @@ int main (int argc, char ** argv) {
 				case 0:
 					ports_shm_ptr_aval[i][a].type = j;
 					ports_shm_ptr_aval[i][a].qty = temparray[j];
+					totalgenerated[j] += temparray[j];
 					gettimeofday(&ports_shm_ptr_aval[i][a].spoildate, NULL);
 					ports_shm_ptr_aval[i][a].spoildate.tv_sec += rand() % (parameters.SO_MAX_VITA - parameters.SO_MIN_VITA);
 					printf("ADDED %d TONS OF %d TO PORT %d\n", temparray[j], j, i);
@@ -257,7 +263,7 @@ int main (int argc, char ** argv) {
 
 	//start timer process
 	strcpy(argst[0], TIMER);
-	sprintf(argst[1], "%d", 30);
+	sprintf(argst[1], "%d", 5);
 	sprintf(argst[2], "%d", parameters.SO_NAVI);
 	sprintf(argst[3], "%d", parameters.SO_PORTI);
 	sprintf(argst[4], "%d", master_msgq);
@@ -291,9 +297,14 @@ int main (int argc, char ** argv) {
 	char dayr[3];
 	char tempstr[20];
 	char portid[20];
-	int * spoilednave = malloc((1 + parameters.SO_NAVI));
-	int * spoiledporto = malloc((1 + parameters.SO_PORTI));
-	int num_kid_pids = parameters.SO_PORTI + parameters.SO_NAVI + 1;
+	int * spoilednave = malloc((1 + parameters.SO_MERCI));
+	int * spoiledporto = malloc((1 + parameters.SO_MERCI));
+	for(int i = 0; i < parameters.SO_MERCI + 1; i++) {
+		spoiledporto[i] = 0;
+		spoilednave[i] = 0;
+	}
+	int num_kid_pids_navi = parameters.SO_NAVI;
+	int num_kid_pids_porti = parameters.SO_PORTI;
 
 	//handle messages
 	int flag = 1;
@@ -362,6 +373,7 @@ int main (int argc, char ** argv) {
 						}
 
 						if(ports_shm_ptr_req[c][j] <= 0) {
+							totalgenerated[j] += temparray[j];
 							addMerceToPort(temparray[j], j, parameters.SO_MAX_VITA, parameters.SO_MIN_VITA, ports_shm_ptr_aval[c], day * parameters.SO_MERCI);
 							break;
 						}
@@ -382,7 +394,11 @@ int main (int argc, char ** argv) {
 
 				//print report
 				printf("-----------------------------------\n");
-				printf("DAY %d REPORT\n", day);
+				if(day < MAX_DAYS) {
+					printf("DAY %d REPORT\n", day);
+				} else {
+					printf("FINAL REPORT\n", day);
+				}
 				printf("SHIP BY SEA WITHOUT CARGO: %d\n", reports[day].seawithoutcargo);
 				printf("SHIP BY SEA WITH CARGO: %d\n", reports[day].seawithcargo);
 				printf("SHIP DOCKED: %d\n", reports[day].docked);
@@ -399,56 +415,57 @@ int main (int argc, char ** argv) {
 				for(int i = 0; i < parameters.SO_NAVI + parameters.SO_PORTI; i++) {
 					kill(kid_pids[i], SIGINT);
 				}
-				
-				//count total avaiable merci
-				for(int i = 0; i < parameters.SO_PORTI; i++) {
-					for(int j = 0; j < parameters.SO_MERCI * (day + 1); j++) {
-						if(ports_shm_ptr_aval[i][j].type == 0) {
-							j = parameters.SO_MERCI * (day + 1);
-						} else if(ports_shm_ptr_aval[i][j].type > 0 && ports_shm_ptr_aval[i][j].qty > 0) {
-							reports[day].ports[i].mercepresent += ports_shm_ptr_aval[i][j].qty;
-						}
-					}
-				}
 
-				//print report
-				printf("-----------------------------------\n");
-				printf("FINAL REPORT\n");
-				printf("SHIP BY SEA WITHOUT CARGO: %d\n", reports[day].seawithoutcargo);
-				printf("SHIP BY SEA WITH CARGO: %d\n", reports[day].seawithcargo);
-				printf("SHIP DOCKED: %d\n", reports[day].docked);
-				for(int i = 0; i < parameters.SO_PORTI; i++) {
-					printf("PORT %d: %d TONS OF MERCE AVAILABLE | ", i, reports[day].ports[i].mercepresent);
-					printf("SENT %d TONS OF MERCE | ", reports[day].ports[i].mercesent);
-					printf("RECEIVED %d TONS OF MERCE | ", reports[day].ports[i].mercereceived);
-					printf("%d/%d OCCUPIED DOCKS\n", reports[day].ports[i].docksocc, reports[day].ports[i].dockstot);
-				}
-
-				for(int i = 0; i < num_kid_pids; i++) {
+				while(num_kid_pids_navi > 0 || num_kid_pids_porti > 0) {
 					msgrcv(master_msgq, &message, (sizeof(long) + sizeof(char) * 100), 1, 0);
-					while(strcmp(message.mesg_text[0], "S") != 0 && strcmp(message.mesg_text[0], "P") != 0) {
-						msgrcv(master_msgq, &message, (sizeof(long) + sizeof(char) * 100), 1, 0);
-					}
+
 					switch (message.mesg_text[0]) {
 						case 'S':
-						//have ship send whats in cargo and whats spoiled
+							strtok(message.mesg_text, ":");
+							for(int i = 1; i < parameters.SO_MERCI + 1; i++) {
+								spoilednave[i] += atoi(tempstr);
+							}
+							num_kid_pids_navi--;
 							break;
 						case 'P':
-						//have port send whats spoiled
+							strtok(message.mesg_text, ":");
+							for(int i = 1; i < parameters.SO_MERCI + 1; i++) {
+								strcpy(tempstr, strtok(NULL, ":"));
+								spoiledporto[i] += atoi(tempstr);
+							}
+							num_kid_pids_porti--;
 							break;
 						default:
 							break;
 					}
 				}
+
+				int * totalsent = malloc((1 + parameters.SO_MERCI) * sizeof(int));
+				int * totaldelivered = malloc((1 + parameters.SO_MERCI) * sizeof(int));
+				int * totalport = malloc((1 + parameters.SO_MERCI) * sizeof(int));
+				for(int i = 0; i < parameters.SO_MERCI + 1; i++) {
+					totalsent[i] = 0;
+					totaldelivered[i] = 0;
+					totalport[i] = 0;
+				}
+
+				printf("-----------------------------------\n");
+				for(int i = 0; i < parameters.SO_PORTI; i++) {
+					for(int j = 0; j < day * parameters.SO_MERCI; j++) {
+						if(ports_shm_ptr_aval[i][j].type > 0 && ports_shm_ptr_aval[i][j].qty > 0) {
+							totalport[ports_shm_ptr_aval[i][j].type] += ports_shm_ptr_aval[i][j].qty;
+						}
+					}
+				}
+
 				flag = 0;
 				break;
 			case 'S' :
 				strtok(message.mesg_text, ":");
-				while(strtok(message.mesg_text, ":") != -1) {
-					
+				for(int i = 1; strcpy(tempstr, strtok(NULL, ":")) != NULL; i++) {
+					spoilednave[i] += atoi(tempstr);
 				}
-				break;
-			case 'P':
+				num_kid_pids_navi--;
 				break;
 			default :
 				strcpy(idin, strtok(message.mesg_text, ":"));
@@ -471,9 +488,7 @@ int main (int argc, char ** argv) {
 		}
 	}
 
-	while((child_pid = wait(&status)) != -1) {
-		dprintf(2, "Pid=%d. Sender (PID=%d) terminated with status 0x%04X\n", getpid(), child_pid, status);
-	}
+	printf("OUT OF WHILE LOOP\n");
 
 	//close messagequeues
 	for(int i = 0; i < parameters.SO_PORTI; i++) {
@@ -487,7 +502,10 @@ int main (int argc, char ** argv) {
 
 	//close semaphore and shared memories
 	semctl(sem_id, 0, IPC_RMID);
-	shmctl(ports_shm_id_aval, IPC_RMID, NULL);
+	for(int i = 0; i < parameters.SO_PORTI; i++) {
+		shmctl(ports_shm_id_aval[i], IPC_RMID, NULL);
+		shmctl(ports_shm_id_req[i], IPC_RMID, NULL);
+	}
 
 	exit(0);
 }

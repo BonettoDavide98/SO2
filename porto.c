@@ -14,12 +14,14 @@ int port_id;
 int master_msgq;
 int num_merci;
 int *shm_ptr_req;
+struct merce *shm_ptr_aval;
 int day = 0;
 int docks;
 int occupied_docks;
 int * spoiled;
 
 void reporthandler();
+void endreporthandler();
 
 
 int main (int argc, char * argv[]) {
@@ -36,7 +38,6 @@ int main (int argc, char * argv[]) {
 	int msgq_porto = atoi(argv[3]);
 	int fill = atoi(argv[9]);
 	int loadtime = atoi(argv[10]);
-	struct merce *shm_ptr_aval;
 	num_merci = atoi(argv[11]);
 	master_msgq = atoi(argv[12]);
 	key_t mem_key;
@@ -64,12 +65,19 @@ int main (int argc, char * argv[]) {
 		exit(1);
 	}
 
+	//setup signal handlers
+	signal(SIGUSR2, reporthandler);
+	signal(SIGINT, endreporthandler);
+
+	//initialize spoiled
+	for(int i = 0; i < num_merci + 1; i++) {
+		spoiled[i] = 0;
+	}
+
 	sops.sem_num = 0;
 	sops.sem_flg = 0;
 	sops.sem_op = -1;
 	semop(master_sem_id, &sops, 1);
-
-	signal(SIGUSR2, reporthandler);
 
 	//start handling ships
 	occupied_docks = 0;
@@ -211,5 +219,25 @@ void reporthandler() {
 	sprintf(temp, "%d", occupied_docks);
 	strcat(message.mesg_text, temp);	//occupied docks
 
+	msgsnd(master_msgq, &message, (sizeof(long) + sizeof(char) * 100), 0);
+}
+
+void endreporthandler() {
+	printf("TERMINATING PORTO...\n");
+	removeSpoiled(shm_ptr_aval, num_merci * day);
+	struct mesg_buffer message;
+	message.mesg_type = 1;
+	char temp[20];
+
+	day++;
+
+	strcpy(message.mesg_text, "P");
+	for(int i = 1; i < num_merci + 1; i++) {
+		strcat(message.mesg_text, ":");
+		sprintf(temp, "%d", spoiled[i]);
+		strcat(message.mesg_text, temp);
+	}
+
+	printf("MESSAGE FROM PORTO: %s\n", message.mesg_text);
 	msgsnd(master_msgq, &message, (sizeof(long) + sizeof(char) * 100), 0);
 }

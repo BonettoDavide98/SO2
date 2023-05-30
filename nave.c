@@ -76,12 +76,17 @@ int main (int argc, char * argv[]) {
 		cargo[c].qty = 0;
 	}
 
+	//initialize spoiled
+	for(int i = 0; i < num_merci + 1; i++) {
+		spoiled[i] = 0;
+	}
+
 	int randomportflag = 0;
 	message.mesg_type = 1;
 
 	signal(SIGUSR1, stormhandler);
 	signal(SIGUSR2, reporthandler);
-	signal(SIGINT, enderporthandler);
+	signal(SIGINT, endreporthandler);
 
 	//wait for semaphore
 	sops.sem_num = 0;
@@ -92,7 +97,7 @@ int main (int argc, char * argv[]) {
 	//ship loop, will last until interrupted by an external process
 	while(1) {
 		//ask master the closest port that asks for my largest merce
-		removeSpoiled(cargo, shipid);
+		removeSpoiled(cargo);
 		strcpy(message.mesg_text, argv[2]);
 		strcat(message.mesg_text, ":");
 		sprintf(posx_str, "%f", pos.x);
@@ -160,7 +165,7 @@ int main (int argc, char * argv[]) {
 		if(strcmp(text, "accept") == 0) {
 			//if port accepted the request, start loading and unloading cargo
 			currentplace = 1;
-			removeSpoiled(cargo, shipid);
+			removeSpoiled(cargo);
 			if((int *) (shm_ptr_porto_req = (int *) shmat(atoi(shm_id_porto_req), NULL, 0)) == -1) {
 				printf("*** shmat error nave req ***\n");
 				exit(1);
@@ -277,19 +282,19 @@ int getLargestCargo(struct merce * cargo, int max_slots) {
 }
 
 //remove spoiled merci
-void removeSpoiled(struct merce *available, int naveid) {
+void removeSpoiled(struct merce *available) {
 	struct timeval currenttime;
 	gettimeofday(&currenttime, NULL);
 	for(int i = 0; i < 20; i++) {
 		if(available[i].type > 0 && available[i].qty > 0) {
 			if(available[i].spoildate.tv_sec < currenttime.tv_sec) {
-				printf("REMOVED %d TONS OF %d FROM SHIP %d DUE TO SPOILAGE\n", available[i].qty, available[i].type, naveid);
+				printf("REMOVED %d TONS OF %d FROM SHIP DUE TO SPOILAGE\n", available[i].qty, available[i].type);
 				spoiled[available[i].type] += available[i].qty;
 				available[i].type = 0;
 				available[i].qty = 0;
 			} else if(available[i].spoildate.tv_sec == currenttime.tv_sec) {
 				if(available[i].spoildate.tv_usec <= currenttime.tv_usec) {
-					printf("REMOVED %d TONS OF %d FROM SHIP %d DUE TO SPOILAGE\n", available[i].qty, available[i].type, naveid);
+					printf("REMOVED %d TONS OF %d FROM SHIP DUE TO SPOILAGE\n", available[i].qty, available[i].type);
 					spoiled[available[i].type] += available[i].qty;
 					available[i].type = 0;
 					available[i].qty = 0;
@@ -415,6 +420,8 @@ void reporthandler() {
 }
 
 void endreporthandler() {
+	printf("TERMINATING NAVE...\n");
+	removeSpoiled(cargo);
 	struct mesg_buffer message;
 	message.mesg_type = 1;
 	char temp[20];
@@ -429,4 +436,6 @@ void endreporthandler() {
 	}
 
 	msgsnd(master_msgq, &message, (sizeof(long) + sizeof(char) * 100), 0);
+
+	exit(0);
 }
